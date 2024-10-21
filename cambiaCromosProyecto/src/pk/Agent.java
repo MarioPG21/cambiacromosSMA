@@ -70,6 +70,9 @@ public class Agent implements Runnable{
         String respuestaXML = in.readLine();
         System.out.println(respuestaXML);
          */
+        in.close();
+        out.close();
+        socket.close();
     }
 
     public void run(){
