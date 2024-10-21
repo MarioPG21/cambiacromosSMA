@@ -3,7 +3,7 @@ package pk;
 import java.net.*;
 import java.io.*;
 
-public class Agent implements Runnable{
+public class Agent{
 
     // Constructor
     public Agent(int id, InetAddress control, int controlPort) throws IOException {
@@ -75,12 +75,34 @@ public class Agent implements Runnable{
         socket.close();
     }
 
-    public void run(){
+    public static void main(String[] args) throws IOException, InterruptedException {
+        // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
         System.out.println("Estoy funcionando, mira que bien");
+        System.out.flush();
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        System.out.println("1: Crea un agente, 2: mátame");
+        System.out.flush();
+
+        String opStr = reader.readLine();
+        int op = Integer.parseInt(opStr);
+
+        if(op == 1){
+            Agent agent = new Agent(1, InetAddress.getLocalHost(), 2);
+            System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
+            System.out.flush();
+
+            Thread.sleep(5000);
+        }else{
+            System.out.println("Me muero noooo ;-;");
+            System.out.flush();
+            return;
+        }
     }
 
 
-    /* Método exec deprecado, habrá que matar el proceso desde el controlador
+    /* Método exec deprecado, habrá que matar el proceso desde el controlador o con opción en main
     public void off() throws IOException {
         Runtime.getRuntime().exec("taskkill /F /IM <processname>.exe");
     }*/
