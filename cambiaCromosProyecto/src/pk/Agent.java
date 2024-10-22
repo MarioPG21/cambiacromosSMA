@@ -28,35 +28,26 @@ public class Agent{
     public ServerSocket getSocket() {return this.listenSocket;}
     public int getPort(){return this.port;}
 
-    // Método de escucha
+    // Método de escucha que lanza un thread para cada mensaje recibido
     public void listen() throws IOException {
-        // Debería ser while(true) en un thread dedicado, provisionalmente implementado con 5 iteraciones
-        for(int i = 0; i < 5; i++){
-            Socket socket = listenSocket.accept();
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        System.out.println("Agente en escucha...");
+        while (true) {  // Bucle de escucha infinito
+            try {
+                // Espera por conexiones
+                Socket socket = listenSocket.accept();
 
-            // Recepción de un mensaje XML
-            // Iteración sobre las líneas recibidas hasta obtener una nula
-            StringBuilder msg = new StringBuilder(); // Para crear una string con el mensaje completo a partir de lineas
-            for(String line = in.readLine(); line != null; line = in.readLine()){
-                msg.append(line);
+                // Creamos un nuevo thread para manejar cada conexión
+                Thread threadGestion = new Thread(new GestionMensaje(socket));
+                threadGestion.start();
+
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-
-            System.out.println(msg);
-
-            // Envío de un mensaje respuesta si fuera necesario
-
-
-            in.close();
-            out.close();
-            socket.close();
         }
-        listenSocket.close();
     }
 
     // Método de habla
-    public void speak() throws IOException {
+    /*public void speak() throws IOException {
         Socket socket = new Socket(controlDir, controlPort);
         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
@@ -65,36 +56,32 @@ public class Agent{
         String mensajeXML = "<mensaje><contenido>Feliz viernes a quien se lo merezca (En XML)</contenido></mensaje>";
         out.println(mensajeXML);
 
-        /*
+
         Respuesta si quisieramos implementar que nos respondan a los mensajes:
         String respuestaXML = in.readLine();
         System.out.println(respuestaXML);
-         */
+
         in.close();
         out.close();
         socket.close();
-    }
+    }*/
 
     public static void main(String[] args) throws IOException, InterruptedException {
         // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        System.out.println("Estoy funcionando, mira que bien, PID:"+ProcessHandle.current().pid());
-        System.out.println("1: Crea un agente, 2: mátame");
+        System.out.println("Agente creado en proceso con PID:"+ProcessHandle.current().pid());
         System.out.flush();
 
-        String opStr = reader.readLine();
-        int op = Integer.parseInt(opStr);
+        Agent agent = new Agent(1, InetAddress.getLocalHost(), 2);
+        System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
+        System.out.flush();
 
-        if(op == 1){
-            Agent agent = new Agent(1, InetAddress.getLocalHost(), 2);
-            System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
-            System.out.flush();
+        agent.listen();
 
-        }else{
-            System.out.println("Me muero noooo ;-;");
-            System.out.flush();
-            return;
-        }
+        //System.out.println("Me muero noooo ;-;");
+        //System.out.flush();
+        //return;
+
     }
 
 
