@@ -67,15 +67,13 @@ public class Agent{
     }*/
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        System.out.println("Agente creado en proceso con PID:"+ProcessHandle.current().pid());
-        System.out.flush();
 
-        Agent agent = new Agent(1, InetAddress.getLocalHost(), 2);
+        String[] values = args[0].split(" ");
+        System.out.println("Agente creado en proceso con PID:" + ProcessHandle.current().pid());
+        System.out.flush();
+        Agent agent = new Agent(Integer.parseInt(values[0]), InetAddress.getByName(values[1]), Integer.parseInt(values[2]));
         System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
         System.out.flush();
-
         agent.listen();
 
         //System.out.println("Me muero noooo ;-;");

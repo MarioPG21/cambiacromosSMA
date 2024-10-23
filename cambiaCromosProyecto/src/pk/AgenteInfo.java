@@ -1,3 +1,5 @@
+package pk;
+
 public class AgenteInfo {
     private final int id;
     private String controladorIP;
