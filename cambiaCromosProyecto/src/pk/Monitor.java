@@ -1,3 +1,5 @@
+package pk;
+
 import java.io.*;
 
 import java.util.Map;
@@ -16,7 +18,7 @@ import javax.xml.transform.stream.StreamResult;
 
 import org.w3c.dom.*;
 
-public class Monitor {
+public class Monitor extends Controlador {
     private final Map<Integer, AgenteInfo> mapaAgentes;
     private final Semaphore semaphore = new Semaphore(1);
 
@@ -57,6 +59,7 @@ public class Monitor {
         AgenteInfo agente = mapaAgentes.get(id);
         if (agente != null) {
             agente.incrementarContadorInactividad();
+            registrarActividad(agente,"Contador Incrementado");
         }
     }
 
@@ -65,8 +68,7 @@ public class Monitor {
         AgenteInfo agente = mapaAgentes.get(id);
         if (agente != null) {
             agente.reiniciarContadorInactividad();
-            //TO DO aqui podriamos registrar la actividad de que se ha reiniciado el contador
-            //pero eso ya estara reflejado en el registro, pues las actividades se veran tmb
+            registrarActividad(agente,"Contador reiniciado");
         }
     }
 
