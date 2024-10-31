@@ -2,6 +2,8 @@ package pk;
 
 import java.net.*;
 import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Agent{
 
@@ -13,6 +15,8 @@ public class Agent{
         this.port = this.listenSocket.getLocalPort();
         this.controlDir = control;
         this.controlPort = controlPort;
+        this.listaIPs = new ArrayList<>();
+        assignSubnetIPs();
     }
 
     // Lista de atributos
@@ -22,27 +26,42 @@ public class Agent{
     private InetAddress dir;            // Dirección del agente
     private InetAddress controlDir;     // Dirección del controlador a cargo del agente
     private int controlPort;            // Número de puerto para conectarnos al controlador
+    private List<String> listaIPs;
 
     // Getters
     public InetAddress getDir() {return dir;}
     public ServerSocket getSocket() {return this.listenSocket;}
     public int getPort(){return this.port;}
 
+    private void assignSubnetIPs() throws IOException {
+        String localIp = dir.getHostAddress(); // Get local IP as a string
+        String[] octets = localIp.split("\\.");
+
+        // Form the subnet base using the first three octets
+        String subnetPrefix = octets[0] + "." + octets[1] + "." + octets[2] + ".";
+
+        // Generate IPs in the subnet from .1 to .254
+        for (int i = 1; i < 255; i++) {
+            String ip = subnetPrefix + i;
+            listaIPs.add(ip);
+        }
+
+        System.out.println("IPs in local subnet: " + listaIPs);
+    }
+
     // Método de escucha que lanza un thread para cada mensaje recibido
-    public void listen() throws IOException {
-        System.out.println("Agente en escucha...");
-        while (true) {  // Bucle de escucha infinito
-            try {
+    public void listen() {
+        System.out.println("Agente en escucha en el puerto " + port + "...");
+        try {
+            while (true) {  // Bucle de escucha infinito
                 // Espera por conexiones
                 Socket socket = listenSocket.accept();
 
-                // Creamos un nuevo thread para manejar cada conexión
-                Thread threadGestion = new Thread(new GestionMensaje(socket));
-                threadGestion.start();
-
-            } catch (IOException e) {
-                e.printStackTrace();
+                // Ejecuta la lógica en un nuevo hilo de Gestión de mensajes
+                new GestionMensaje(socket).run();
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -76,7 +95,11 @@ public class Agent{
         System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
         System.out.flush();
 
-        agent.listen();
+        //Comenzar búsqueda de agentes
+        agent.buscarAgentes();
+
+        Thread threadListen = new Thread(agent::listen);
+        threadListen.start();
 
         //System.out.println("Me muero noooo ;-;");
         //System.out.flush();
@@ -84,7 +107,58 @@ public class Agent{
 
     }
 
+    public void buscarAgentes() {
+        Thread searchThread = new Thread(new BuscarAgentes());
+        searchThread.start();
+    }
+    private class BuscarAgentes implements Runnable {
+        @Override
+        public void run() {
+            while (true) {  // Bucle infinito para buscar todo el rato
+                for (String ipString : listaIPs) {  // iterar las ips en la lista de ips
+                    try {
+                        InetAddress ipAddress = InetAddress.getByName(ipString);
+                        for (int port = 4000; port <= 4100; port += 2) {  // Iterar puertos pares dentro del rango
 
+                            // Espera de 2 segundos entre comprobaciones
+                            try {
+                                Thread.sleep(2000);
+                            } catch (InterruptedException e) {
+                                System.err.println("BuscarAgentes thread interrupted.");
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+
+                            try (Socket agentSocket = new Socket(ipAddress, port)) {  // Intenta conectarse al supuesto agente localizado en ip y puerto
+                                System.out.println("Agente encontrado en IP: " + ipString + ", Puerto: " + port);
+                                // Mandar el mensaje de hola al agente
+                                PrintWriter out = new PrintWriter(agentSocket.getOutputStream(), true);
+                                //TODO: cambiar formato del mensaje cuando lo tengamos.
+                                out.println("Hola agente!");
+
+                                // Mandar mensaje de hola al monitor
+                                try (Socket monitorSocket = new Socket(controlDir, 4300)) {
+                                    PrintWriter monitorOut = new PrintWriter(monitorSocket.getOutputStream(), true);
+                                    //TODO: cambiar formato del mensaje cuando lo tengamos.
+                                    monitorOut.println("Hola monitor!");
+                                } catch (IOException e) {
+                                    System.err.println("No se pudo conectar al monitor en el puerto 4300.");
+                                    e.printStackTrace();
+                                }
+                            } catch (IOException e) {
+                                // Errores de conexión si un agente no está disponible
+                                System.out.println("No se pudo conectar a " + ipString + " en el puerto " + port);
+                            }
+                        }
+                    } catch (UnknownHostException e) {
+                        System.err.println("Dirección IP desconocida: " + ipString);
+                        e.printStackTrace();
+                    }
+
+                }
+            }
+        }
+    }
     /* Método exec deprecado, habrá que matar el proceso desde el controlador o con opción en main
     public void off() throws IOException {
         Runtime.getRuntime().exec("taskkill /F /IM <processname>.exe");
