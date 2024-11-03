@@ -57,7 +57,6 @@ public class GestionMensaje implements Runnable {
             //                                         //
             //                                         //
 
-
             // Cierre del lector y del socket
             in.close();
             out.close();

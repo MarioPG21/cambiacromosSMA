@@ -27,11 +27,71 @@ public class Agent{
     private InetAddress controlDir;     // Dirección del controlador a cargo del agente
     private int controlPort;            // Número de puerto para conectarnos al controlador
     private List<String> listaIPs;
-
+    private InetAddress ipMonitor;
+    private int portMonitor = 4300;
+    private static volatile boolean isPaused = false;
     // Getters
     public InetAddress getDir() {return dir;}
     public ServerSocket getSocket() {return this.listenSocket;}
     public int getPort(){return this.port;}
+
+
+    public double comprobar_carga(){
+        long free = Runtime.getRuntime().freeMemory();
+        long total = Runtime.getRuntime().totalMemory();
+        return ((double) free / total) * 100;
+    }
+
+
+    public void reproducete(int id, InetAddress control, int controlPort) throws IOException {
+
+        String[] args = new String[3];
+        args[0] =  Integer.toString(id);
+        args[1] =  control.getHostAddress();
+        args[2] =  Integer.toString(controlPort);
+        ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp", "out/production/cambiaCromosProyecto", "pk.Agent", String.join(" ", args));
+        Process process = processBuilder.start();
+
+    }
+
+    public void heNacido(){
+        DataInputStream in;
+        DataOutputStream out;
+        String data = "HeNacido"; //TODO cambiar a nuevo mensaje
+        try {
+            Socket Agentsocket = new Socket(ipMonitor,portMonitor);
+            out = new DataOutputStream(Agentsocket.getOutputStream());
+            in = new DataInputStream(Agentsocket.getInputStream());
+            out.writeUTF(data);
+            data = in.readUTF();
+            System.out.println("Respuesta: " + data);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void parado(InetAddress agenteEmisor, int portEmisor){
+        DataInputStream in;
+        DataOutputStream out;
+        isPaused = true;
+        String data = "parado"; //TODO cambiar a nuevo mensaje
+        try {
+            Socket Agentsocket = new Socket(agenteEmisor,portEmisor);
+            out = new DataOutputStream(Agentsocket.getOutputStream());
+            in = new DataInputStream(Agentsocket.getInputStream());
+            out.writeUTF(data);
+            data = in.readUTF();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    public void continua(){
+        isPaused = false;
+    }
+
+
 
     private void assignSubnetIPs() throws IOException {
         String localIp = dir.getHostAddress(); // Get local IP as a string
@@ -55,8 +115,8 @@ public class Agent{
         try {
             while (true) {  // Bucle de escucha infinito
                 // Espera por conexiones
-                Socket socket = listenSocket.accept();
 
+                Socket socket = listenSocket.accept();
                 // Ejecuta la lógica en un nuevo hilo de Gestión de mensajes
                 new GestionMensaje(socket).run();
             }
@@ -87,14 +147,12 @@ public class Agent{
 
     public static void main(String[] args) throws IOException, InterruptedException {
         // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        String[] values = args[0].split(" ");
         System.out.println("Agente creado en proceso con PID:"+ProcessHandle.current().pid());
         System.out.flush();
-
-        Agent agent = new Agent(1, InetAddress.getLocalHost(), 2);
+        Agent agent = new Agent(Integer.parseInt(values[0]), InetAddress.getByName(values[1]), Integer.parseInt(values[2]));
         System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
         System.out.flush();
-
         //Comenzar búsqueda de agentes
         agent.buscarAgentes();
 
@@ -114,7 +172,7 @@ public class Agent{
     private class BuscarAgentes implements Runnable {
         @Override
         public void run() {
-            while (true) {  // Bucle infinito para buscar todo el rato
+            while (!isPaused) {  // Bucle infinito para buscar todo el rato
                 for (String ipString : listaIPs) {  // iterar las ips en la lista de ips
                     try {
                         InetAddress ipAddress = InetAddress.getByName(ipString);
