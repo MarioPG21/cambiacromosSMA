@@ -27,8 +27,8 @@ public class Agent{
     private String id;                      // Id del agente
     private ServerSocket listenSocket;  // Socket de escucha
     private int port;                   // Puerto del socket de escucha en la máquina
-    private int portMin = 4000;        // Comienzo del rango de puertos que usaremos para agentes
-    private int portMax = 4100;        // Fin del rango de puertos que usaremos para agentes
+    private int portMin;        // Comienzo del rango de puertos que usaremos para agentes
+    private int portMax;        // Fin del rango de puertos que usaremos para agentes
     private InetAddress dir;            // Dirección del agente
     private InetAddress controlDir;     // Dirección del controlador a cargo del agente
     private int controlPort;            // Número de puerto para conectarnos al controlador
@@ -111,17 +111,20 @@ public class Agent{
 
     public static void main(String[] args) throws IOException, InterruptedException {
 
+        InetAddress monitorAddress = InetAddress.getLocalHost();
+        int monitorPort = 4300;
+
         // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         System.out.println("Agente creado en proceso con PID:"+ProcessHandle.current().pid());
         System.out.flush();
 
-        Agent agent = new Agent(InetAddress.getLocalHost(), 2);
+        Agent agent = new Agent(monitorAddress, monitorPort);
         System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
         System.out.flush();
 
         //Comenzar búsqueda de agentes
-        agent.buscarAgentes();
+        agent.agentSearch();
 
         Thread threadListen = new Thread(agent::listen);
         threadListen.start();
@@ -132,34 +135,28 @@ public class Agent{
 
     }
 
-    public void buscarAgentes() {
-        Thread searchThread = new Thread(new BuscarAgentes());
+    // Búsqueda de agentes
+
+    private void agentSearch() {
+        Thread searchThread = new Thread(new AgentSearch());
         searchThread.start();
     }
-    private class BuscarAgentes implements Runnable {
+
+    private class AgentSearch implements Runnable {
         @Override
         public void run() {
-            while (true) {  // Bucle infinito para buscar todo el rato
+            while (true) {  // Bucle infinito para buscar siempre
                 for (String ipString : listaIPs) {  // iterar las ips en la lista de ips
                     try {
                         InetAddress ipAddress = InetAddress.getByName(ipString);
                         for (int p = portMin; port <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
-
-                            // Espera de 2 segundos entre comprobaciones
-                            //try {
-                            //     Thread.sleep(2000);
-                            //} catch (InterruptedException e) {
-                            //    System.err.println("BuscarAgentes thread interrupted.");
-                            //    Thread.currentThread().interrupt();
-                            //    break;
-                            //}
-
                             System.out.println("Agente buscando en IP: " + ipString + ", Puerto: " + p);
                             try{
                                 // Intenta conectarse al supuesto agente localizado en ip y puerto
                                 Socket agentSocket = new Socket();
-                                InetSocketAddress address = new InetSocketAddress(ipString, p);                                // Reducimos el timeout para que tarde menos en iterar sobre los puertos
-                                agentSocket.connect(address, 1);
+                                // Reducimos el timeout para que tarde menos en iterar sobre los puertos
+                                InetSocketAddress address = new InetSocketAddress(ipString, p);
+                                agentSocket.connect(address, 100);
 
                                 System.out.println("Agente encontrado en IP: " + ipString + ", Puerto: " + p);
                                 // Mandar el mensaje de hola al agente
@@ -168,7 +165,7 @@ public class Agent{
                                 out.println("Hola agente!");
 
                                 // Mandar mensaje de hola al monitor
-                                try (Socket monitorSocket = new Socket(controlDir, 4300)) {
+                                try (Socket monitorSocket = new Socket(controlDir, controlPort)) {
                                     PrintWriter monitorOut = new PrintWriter(monitorSocket.getOutputStream(), true);
                                     //TODO: cambiar formato del mensaje cuando lo tengamos.
                                     monitorOut.println("Hola monitor!");
@@ -186,10 +183,52 @@ public class Agent{
                         e.printStackTrace();
                     }
 
+                    // Espera de 2 segundos entre búsquedas
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        System.err.println("BuscarAgentes thread interrupted.");
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+
                 }
             }
         }
     }
+
+    // Habla
+
+    private void Speak(String msg, String ipDest, int portDest){
+        Thread speakThread = new Thread(new Speaker(msg, ipDest, portDest));
+        speakThread.run();
+    }
+
+    private class Speaker implements Runnable{
+        private String msg;     // Mensaje que se enviará
+        private String ipDest;  // IP del destinatario
+        private int portDest;   // Puerto del destinatario
+
+        public Speaker(String msg, String ipDest, int portDest){
+            this.msg = msg;
+            this.ipDest = ipDest;
+            this.portDest = portDest;
+        }
+
+        @Override
+        public void run() {
+            try{
+                Socket s = new Socket(ipDest, portDest);
+            } catch (UnknownHostException e) {
+                // Esta excepción saltará si hay un problema con la IP
+                e.printStackTrace();
+            } catch (IOException e) {
+                // Esta es la excepción que salta cuando el agente no es alcanzable
+                System.out.println("Couldn't reach ");
+            }
+        }
+    }
+
     /* Método exec deprecado, habrá que matar el proceso desde el controlador o con opción en main
     public void off() throws IOException {
         Runtime.getRuntime().exec("taskkill /F /IM <processname>.exe");
