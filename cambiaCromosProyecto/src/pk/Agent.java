@@ -172,9 +172,9 @@ public class Agent{
 
     // Habla
 
-    private void Speak(String msg, String ipDest, int portDest){
+    private void speak(String msg, String ipDest, int portDest){
         Thread speakThread = new Thread(new Speaker(msg, ipDest, portDest));
-        speakThread.run();
+        speakThread.start();
     }
 
     private class Speaker implements Runnable{
@@ -204,7 +204,7 @@ public class Agent{
                 // TODO: hacer esto para actualizar lista de agentes en los métodos que lo requieran
                 System.out.println("Couldn't reach agent, removing from list of agents.");
                 AgentKey missing = new AgentKey(ipDest, portDest);
-                if(agentList.containsKey(missing)) agentList.remove(missing);
+                agentList.remove(missing);
             }
         }
     }
@@ -213,7 +213,7 @@ public class Agent{
 
     private void listen(){
         Thread listenThread = new Thread(new Listener());
-        listenThread.run();
+        listenThread.start();
     }
 
     private class Listener implements Runnable{
