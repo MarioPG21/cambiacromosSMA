@@ -5,6 +5,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
+
 public class Agent{
 
     // Constructor
@@ -86,6 +87,7 @@ public class Agent{
     }*/
 
     public static void main(String[] args) throws IOException, InterruptedException {
+
         // Definimos un reader para que el agente pueda recibir entrada desde el proceso padre
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         System.out.println("Agente creado en proceso con PID:"+ProcessHandle.current().pid());
@@ -121,15 +123,21 @@ public class Agent{
                         for (int port = 4000; port <= 4100; port += 2) {  // Iterar puertos pares dentro del rango
 
                             // Espera de 2 segundos entre comprobaciones
-                            try {
-                                Thread.sleep(2000);
-                            } catch (InterruptedException e) {
-                                System.err.println("BuscarAgentes thread interrupted.");
-                                Thread.currentThread().interrupt();
-                                break;
-                            }
+                            //try {
+                            //     Thread.sleep(2000);
+                            //} catch (InterruptedException e) {
+                            //    System.err.println("BuscarAgentes thread interrupted.");
+                            //    Thread.currentThread().interrupt();
+                            //    break;
+                            //}
 
-                            try (Socket agentSocket = new Socket(ipAddress, port)) {  // Intenta conectarse al supuesto agente localizado en ip y puerto
+                            System.out.println("Agente buscando en IP: " + ipString + ", Puerto: " + port);
+                            try{
+                                // Intenta conectarse al supuesto agente localizado en ip y puerto
+                                Socket agentSocket = new Socket();
+                                InetSocketAddress address = new InetSocketAddress(ipString, port);                                // Reducimos el timeout para que tarde menos en iterar sobre los puertos
+                                agentSocket.connect(address, 1);
+
                                 System.out.println("Agente encontrado en IP: " + ipString + ", Puerto: " + port);
                                 // Mandar el mensaje de hola al agente
                                 PrintWriter out = new PrintWriter(agentSocket.getOutputStream(), true);
