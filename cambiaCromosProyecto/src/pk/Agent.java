@@ -119,7 +119,7 @@ public class Agent{
                 for (String ipString : ipList) {  // iterar las ips en la lista de ips
                     try {
                         InetAddress ipAddress = InetAddress.getByName(ipString);
-                        for (int p = portMin; port <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
+                        for (int p = portMin; p <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
                             System.out.println("Agente buscando en IP: " + ipString + ", Puerto: " + p);
                             try{
                                 // Intenta conectarse al supuesto agente localizado en ip y puerto
