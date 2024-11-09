@@ -115,40 +115,47 @@ public class Agent{
     private class AgentSearch implements Runnable {
         @Override
         public void run() {
+            //TODO: Cambiar a mensaje de hola de descubrimiento
+            byte[] sendData = "Hola agente!".getBytes(); // Mensaje a enviar al agente
+            //TODO: no se hasta que punto esto es capaz de recibir el mensaje de vuelta por tamaño
+            byte[] receiveData = new byte[1024];         // Buffer para recibir la respuesta
+
             while (true) {  // Bucle infinito para buscar siempre
-                for (String ipString : ipList) {  // iterar las ips en la lista de ips
+                for (String ipString : ipList) {  // Iterar sobre las IPs en la lista de IPs
                     try {
                         InetAddress ipAddress = InetAddress.getByName(ipString);
-                        for (int p = portMin; port <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
+                        for (int p = portMin+1; p <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
                             System.out.println("Agente buscando en IP: " + ipString + ", Puerto: " + p);
-                            try{
-                                // Intenta conectarse al supuesto agente localizado en ip y puerto
-                                Socket agentSocket = new Socket();
-                                // Reducimos el timeout para que tarde menos en iterar sobre los puertos
-                                InetSocketAddress address = new InetSocketAddress(ipString, p);
-                                agentSocket.connect(address, 100);
 
+                            try (DatagramSocket udpSocket = new DatagramSocket()) {
+                                // Configurar timeout para la espera de respuesta
+                                udpSocket.setSoTimeout(100);
+
+                                // Crear paquete de envío
+                                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipAddress, p);
+                                udpSocket.send(sendPacket);  // Enviar paquete al agente
+
+                                // Intentar recibir respuesta del agente
+                                DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+                                udpSocket.receive(receivePacket); // Espera a recibir respuesta
+
+                                // Si recibimos respuesta, el agente está en este puerto
                                 System.out.println("Agente encontrado en IP: " + ipString + ", Puerto: " + p);
-                                // Mandar el mensaje de hola al agente
-                                PrintWriter out = new PrintWriter(agentSocket.getOutputStream(), true);
-                                //TODO: cambiar formato del mensaje cuando lo tengamos.
-                                out.println("Hola agente!");
-                                out.close();
-                                agentSocket.close();
+                                String response = new String(receivePacket.getData(), 0, receivePacket.getLength());
+
+                                //TODO: Ahora mismo hace simplemente un print, debe añadirlo a la lista de agentes
+                                System.out.println("Respuesta del agente: " + response);
+
                                 // Mandar mensaje de hola al monitor
-                                try (Socket monitorSocket = new Socket(controlIp, controlPort)) {
-                                    PrintWriter monitorOut = new PrintWriter(monitorSocket.getOutputStream(), true);
-                                    //TODO: cambiar formato del mensaje cuando lo tengamos.
-                                    monitorOut.println("Hola monitor!");
-                                    monitorOut.close();
-                                    monitorSocket.close();
-                                } catch (IOException e) {
-                                    System.err.println("No se pudo conectar al monitor en el puerto 4300.");
-                                    e.printStackTrace();
-                                }
+                                sendHelloToMonitor();
+
+                            } catch (SocketTimeoutException e) {
+                                // Si no hay respuesta, asumimos que no hay agente en este puerto
+                                System.out.println("No se recibió respuesta de " + ipString + " en el puerto " + p);
                             } catch (IOException e) {
-                                // Errores de conexión si un agente no está disponible
-                                System.out.println("No se pudo conectar a " + ipString + " en el puerto " + p);
+                                // Otras excepciones de entrada/salida
+                                System.err.println("Error al enviar/recibir en IP: " + ipString + ", Puerto: " + p);
+                                e.printStackTrace();
                             }
                         }
                     } catch (UnknownHostException e) {
@@ -164,8 +171,19 @@ public class Agent{
                         Thread.currentThread().interrupt();
                         break;
                     }
-
                 }
+            }
+        }
+
+        private void sendHelloToMonitor() {
+            try (Socket monitorSocket = new Socket(controlIp, controlPort)) {
+                PrintWriter monitorOut = new PrintWriter(monitorSocket.getOutputStream(), true);
+                //TODO: Cambiar a mensaje XML
+                monitorOut.println("Hola monitor!");
+                monitorOut.close();
+            } catch (IOException e) {
+                System.err.println("No se pudo conectar al monitor en el puerto " + controlPort);
+                e.printStackTrace();
             }
         }
     }
