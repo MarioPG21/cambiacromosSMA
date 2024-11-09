@@ -124,7 +124,9 @@ public class Agent{
                 for (String ipString : ipList) {  // Iterar sobre las IPs en la lista de IPs
                     try {
                         InetAddress ipAddress = InetAddress.getByName(ipString);
+
                         for (int p = portMin+1; p <= portMax; p += 2) {  // Iterar puertos pares dentro del rango
+
                             System.out.println("Agente buscando en IP: " + ipString + ", Puerto: " + p);
 
                             try (DatagramSocket udpSocket = new DatagramSocket()) {
