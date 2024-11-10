@@ -1,7 +1,18 @@
 package pk;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.net.*;
 import java.io.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +36,28 @@ public class Agent{
         findDir();          // Se coloca en un socket del rango establecido
         assignSubnetIPs();  // Define la lista de IP de nuestra subred.
         // TODO: mandar mensaje heNacido al monitor antes de ponerse a escuchar
+        sendHelloToMonitor();
         listen();           // Se pone a escuchar
+    }
+
+    private void sendHelloToMonitor() {
+
+        try (Socket monitorSocket = new Socket(controlIp, controlPort)) {
+            DataOutputStream out = new DataOutputStream(monitorSocket.getOutputStream());
+            DataInputStream in = new DataInputStream(monitorSocket.getInputStream());
+            LocalDateTime tiempoLocal = LocalDateTime.now();
+            DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            String tiempoFormateado = tiempoLocal.format(formato);
+            String mensaje;
+            mensaje = createXmlMessage("1", "2", "heNacido", 1, "TCP", this.id, this.listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", controlIp, controlPort + 1, controlPort, tiempoFormateado, "nada"
+            );
+            out.writeUTF(mensaje);
+            String data = in.readUTF();
+            System.out.println("Mensaje Recibido: " + data);
+        } catch (IOException e) {
+            System.err.println("No se pudo conectar al monitor en el puerto " + controlPort);
+            e.printStackTrace();
+        }
     }
 
     // Lista de atributos
@@ -117,6 +149,7 @@ public class Agent{
         public void run() {
             //TODO: Cambiar a mensaje de hola de descubrimiento
             byte[] sendData = "Hola agente!".getBytes(); // Mensaje a enviar al agente
+
             //TODO: no se hasta que punto esto es capaz de recibir el mensaje de vuelta por tamaño
             byte[] receiveData = new byte[1024];         // Buffer para recibir la respuesta
 
@@ -132,8 +165,14 @@ public class Agent{
                             try (DatagramSocket udpSocket = new DatagramSocket()) {
                                 // Configurar timeout para la espera de respuesta
                                 udpSocket.setSoTimeout(100);
-
+                                LocalDateTime tiempoLocal = LocalDateTime.now();
+                                DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                                String tiempoFormateado = tiempoLocal.format(formato);
                                 // Crear paquete de envío
+                                String mensaje;
+                                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", ipString, p, p-1, tiempoFormateado, "nada"
+                                );
+                                sendData = mensaje.getBytes();
                                 DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipAddress, p);
                                 udpSocket.send(sendPacket);  // Enviar paquete al agente
 
@@ -177,17 +216,7 @@ public class Agent{
             }
         }
 
-        private void sendHelloToMonitor() {
-            try (Socket monitorSocket = new Socket(controlIp, controlPort)) {
-                PrintWriter monitorOut = new PrintWriter(monitorSocket.getOutputStream(), true);
-                //TODO: Cambiar a mensaje XML
-                monitorOut.println("Hola monitor!");
-                monitorOut.close();
-            } catch (IOException e) {
-                System.err.println("No se pudo conectar al monitor en el puerto " + controlPort);
-                e.printStackTrace();
-            }
-        }
+
     }
 
     // Habla
@@ -213,8 +242,17 @@ public class Agent{
             try{
                 //TODO: cambiar esto cuando tengamos XML operativo si es necesario
                 Socket socket = new Socket(ipDest, portDest);
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                out.println(msg);
+                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                DataInputStream in = new DataInputStream(socket.getInputStream());
+                LocalDateTime tiempoLocal = LocalDateTime.now();
+                DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                String tiempoFormateado = tiempoLocal.format(formato);
+                String mensaje;
+                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", ipDest, portDest+1, portDest, tiempoFormateado, "nada"
+                );
+                out.writeUTF(mensaje);
+                String data = in.readUTF();
+                System.out.println("Mensaje Recibido: " + data);
                 socket.close();
             } catch (UnknownHostException e) {
                 // Esta excepción saltará si hay un problema con la IP
@@ -244,13 +282,146 @@ public class Agent{
                 while (true) {  // Bucle de escucha infinito
                     // Espera por conexiones
                     Socket socket = listenSocket.accept();
-
                     // Ejecuta la lógica en un nuevo hilo de Gestión de mensajes
                     new GestionMensaje(socket).run();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    public static String createXmlMessage(String comucID, String msgID, String typeProtocol, int protocolStep,
+                                          String communicationProtocol, String originId, String originIp, int originPortUDP,
+                                          int originPortTCP, String originTime, String destinationId, String destinationIp,
+                                          int destinationPortUDP, int destinationPortTCP, String destinationTime, String bodyInfo) {
+        try {
+            // Configura el analizador de documentos
+            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+
+            // Crea el documento XML
+            Document doc = docBuilder.newDocument();
+            Element rootElement = doc.createElement("Message");
+            rootElement.setAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+            doc.appendChild(rootElement);
+            Element nodeComunc = doc.createElement("comunc_id");
+            nodeComunc.setTextContent(comucID);
+            rootElement.appendChild(nodeComunc);
+            Element nodeMesgID = doc.createElement("msg_id");
+            nodeMesgID.setTextContent(msgID);
+            rootElement.appendChild(nodeMesgID);
+
+            // Agrega los elementos al XML
+
+            // Elemento header
+            Element header = doc.createElement("header");
+            rootElement.appendChild(header);
+            Element typeP = doc.createElement("type_protocol");
+            typeP.setTextContent(typeProtocol);
+            header.appendChild(typeP);
+            Element protocols = doc.createElement("protocol_step");
+            protocols.setTextContent(Integer.toString(protocolStep));
+            header.appendChild(protocols);
+            Element communicationProtocolS = doc.createElement("comunication_protocol");
+            communicationProtocolS.setTextContent(communicationProtocol);
+            header.appendChild(communicationProtocolS);
+
+
+
+            // Elemento origin
+            Element origin = doc.createElement("origin");
+            header.appendChild(origin);
+
+            Element originID = doc.createElement("origin_id");
+            originID.setTextContent(originId);
+            origin.appendChild(originID);
+            Element originIP = doc.createElement("origin_ip");
+            originIP.setTextContent(originIp);
+            origin.appendChild(originIP);
+            Element originPort = doc.createElement("origin_port_UDP");
+            originPort.setTextContent(Integer.toString(originPortUDP));
+            origin.appendChild(originPort);
+            Element originPortp = doc.createElement("origin_port_TCP");
+            originPortp.setTextContent(Integer.toString(originPortTCP));
+            origin.appendChild(originPortp);
+            Element originT = doc.createElement("origin_time");
+            originT.setTextContent(originTime);
+            origin.appendChild(originT);
+
+            // Elemento destination
+            Element destination = doc.createElement("destination");
+            header.appendChild(destination);
+
+            Element destinationID = doc.createElement("destination_id");
+            destinationID.setTextContent(destinationId);
+            destination.appendChild(destinationID);
+            Element destinationIP = doc.createElement("destination_ip");
+            destinationIP.setTextContent(destinationIp);
+            destination.appendChild(destinationIP);
+            Element destinationPort = doc.createElement("destination_port_UDP");
+            destinationPort.setTextContent(Integer.toString(destinationPortUDP));
+            destination.appendChild(destinationPort);
+            Element destinationPortp = doc.createElement("destination_port_TCP");
+            destinationPortp.setTextContent(Integer.toString(destinationPortTCP));
+            destination.appendChild(destinationPortp);
+            Element destinationT = doc.createElement("destination_time");
+            destinationT.setTextContent(destinationTime);
+            destination.appendChild(destinationT);
+
+
+
+
+            // Elemento body
+            Element body = doc.createElement("body");
+            rootElement.appendChild(body);
+
+            Element bodyI = doc.createElement("body_info");
+            bodyI.setTextContent(bodyInfo);
+            body.appendChild(bodyI);
+
+
+            //createElement(doc, String.valueOf(body), "body_info", bodyInfo);
+
+            // Elemento common_content vacío
+            Element commonContent = doc.createElement("common_content");
+            rootElement.appendChild(commonContent);
+
+            // Convierte el documento en una cadena XML
+            StringWriter writer = new StringWriter();
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            transformer.transform(new DOMSource(doc), new StreamResult(writer));
+            String xmlString = writer.toString();
+            return xmlString;
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static void saveXmlStringToFile(String xmlContent, String filePath) {
+        try {
+
+
+            // Crea un objeto File para el archivo XML
+            File file = new File(filePath);
+
+            // Crea un BufferedWriter para escribir en el archivo
+            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+
+            // Escribe el contenido XML en el archivo
+            writer.write(xmlContent);
+
+            // Cierra el BufferedWriter
+            writer.close();
+
+            System.out.println("Archivo XML guardado correctamente en: " + filePath);
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Ocurrió un error al guardar el archivo XML.");
         }
     }
 
