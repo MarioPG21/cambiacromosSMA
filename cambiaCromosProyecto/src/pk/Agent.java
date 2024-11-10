@@ -22,6 +22,7 @@ public class Agent{
 
     // Constructor
     public Agent(String controlIp, int controlPort) throws IOException {
+
         long time = System.currentTimeMillis();
         this.id = String.valueOf(time) ; // El ID será el tiempo de creación de objeto.
         this.dir = InetAddress.getLocalHost();
@@ -49,7 +50,7 @@ public class Agent{
             DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             String tiempoFormateado = tiempoLocal.format(formato);
             String mensaje;
-            mensaje = createXmlMessage("1", "2", "heNacido", 1, "TCP", this.id, this.listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", controlIp, controlPort + 1, controlPort, tiempoFormateado, "nada"
+            mensaje = createXmlMessage("1", "2", "heNacido", 1, "TCP", this.id, this.listenSocket.getInetAddress().getHostName(), portTCP + 1, portTCP, tiempoFormateado, "1", controlIp, controlPort + 1, controlPort, tiempoFormateado, "nada"
             );
             out.writeUTF(mensaje);
             String data = in.readUTF();
@@ -63,7 +64,7 @@ public class Agent{
     // Lista de atributos
     private String id;                  // Id del agente
     private ServerSocket listenSocket;  // Socket de escucha
-    private int port;                   // Puerto del socket de escucha en la máquina
+    private int portTCP;                   // Puerto del socket de escucha en la máquina
     private int portMin;                // Comienzo del rango de puertos que usaremos para agentes
     private int portMax;                // Fin del rango de puertos que usaremos para agentes
     private InetAddress dir;            // Dirección del agente
@@ -76,7 +77,7 @@ public class Agent{
     // Getters
     public InetAddress getDir() {return dir;}
     public ServerSocket getSocket() {return this.listenSocket;}
-    public int getPort(){return this.port;}
+    public int getPortTCP(){return this.portTCP;}
 
     private void findDir() throws UnknownHostException {
         String ipAdd = dir.getHostAddress();
@@ -86,13 +87,13 @@ public class Agent{
                 System.out.println("Attempting to nest in port " + p);
                 InetSocketAddress address = new InetSocketAddress(ipAdd, p);
                 listenSocket.bind(address);
-                this.port = p;
+                this.portTCP = p;
                 break;
             } catch (IOException e) {
                 System.out.println("Couldn't nest in port.");
             }
         }
-        System.out.println("Successfully nested in port "+ port);
+        System.out.println("Successfully nested in port "+ portTCP);
     }
 
     private void assignSubnetIPs() throws IOException {
@@ -122,7 +123,7 @@ public class Agent{
         System.out.flush();
 
         Agent agent = new Agent(monitorAddress, monitorPort);
-        System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPort());
+        System.out.println("Agente "+agent.id+", con dirección "+agent.getDir().toString()+" y puerto "+agent.getPortTCP());
         System.out.flush();
 
         //Comenzar búsqueda de agentes
@@ -170,7 +171,7 @@ public class Agent{
                                 String tiempoFormateado = tiempoLocal.format(formato);
                                 // Crear paquete de envío
                                 String mensaje;
-                                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", ipString, p, p-1, tiempoFormateado, "nada"
+                                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), portTCP + 1, portTCP, tiempoFormateado, "1", ipString, p, p-1, tiempoFormateado, "nada"
                                 );
                                 sendData = mensaje.getBytes();
                                 DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipAddress, p);
@@ -248,7 +249,7 @@ public class Agent{
                 DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
                 String tiempoFormateado = tiempoLocal.format(formato);
                 String mensaje;
-                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), port + 1, port, tiempoFormateado, "1", ipDest, portDest+1, portDest, tiempoFormateado, "nada"
+                mensaje = createXmlMessage("1", "2", "hola", 1, "TCP", id, listenSocket.getInetAddress().getHostName(), portTCP + 1, portTCP, tiempoFormateado, "1", ipDest, portDest+1, portDest, tiempoFormateado, "nada"
                 );
                 out.writeUTF(mensaje);
                 String data = in.readUTF();
@@ -277,7 +278,7 @@ public class Agent{
     private class Listener implements Runnable{
         @Override
         public void run(){
-            System.out.println("Agente en escucha en el puerto " + port + "...");
+            System.out.println("Agente en escucha en el puerto " + portTCP + "...");
             try {
                 while (true) {  // Bucle de escucha infinito
                     // Espera por conexiones
