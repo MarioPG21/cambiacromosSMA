@@ -115,10 +115,9 @@ public class Agent{
         try {
             while (true) {  // Bucle de escucha infinito
                 // Espera por conexiones
-
                 Socket socket = listenSocket.accept();
                 // Ejecuta la lógica en un nuevo hilo de Gestión de mensajes
-                new GestionMensaje(socket).run();
+                new GestionMensaje(socket,this).run();
             }
         } catch (IOException e) {
             e.printStackTrace();

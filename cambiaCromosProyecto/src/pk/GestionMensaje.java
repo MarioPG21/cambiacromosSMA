@@ -7,9 +7,10 @@ import java.io.PrintWriter;
 import java.net.Socket;
 
 public class GestionMensaje implements Runnable {
-    private Socket socket;
-    public GestionMensaje(Socket socket) {this.socket = socket;}
 
+
+    private Socket socket;
+    public GestionMensaje(Socket socket, Agent agent) {this.socket = socket;}
 
     @Override
     public void run() {
@@ -19,9 +20,9 @@ public class GestionMensaje implements Runnable {
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             StringBuilder mensaje = new StringBuilder();
             String respuesta = null;
-
             // Esta parte lee el mensaje línea por línea. Esto puede cambiar una vez se sepa el formato de mensajes recibidos.
             String linea;
+
             while ((linea = in.readLine()) != null) {
                 mensaje.append(linea);
             }
