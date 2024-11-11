@@ -1,38 +1,46 @@
 package agente;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
+
+import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 
-import mensajes.Body;
-import mensajes.CommonContent;
-import mensajes.Header;
-import mensajes.HeaderDestinationInfo;
-import mensajes.HeaderOriginInfo;
-import mensajes.Message;
-import mensajes.TipoDeProtocolo;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 
 import java.util.Scanner;
 
-import mensajes.Message;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
+import javax.xml.validation.Validator;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathFactory;
 
 public class Agent {
-    //TODO: CAMBIAR LO DE VALIDACION DE XML COMO LO TIENE CURTINEZ  REQUISITO 4
+
     //TODO: CAMBIAR TIPO DE MENSAJE DE DESCUBRIMIENTO, PONERLO EN XML REQUISITO 7
-    //TODO: EN CADA METODO DE ESCUCHA PONER TRANSFORMACION A DOM Y VALIDACION DEL XSD REQUISITO 7
+
     //TODO: FUNCIONES BASICAS REQUISITO 10
     
     // Atributos o propiedades de la clase
@@ -69,7 +77,7 @@ public class Agent {
         initializeDatagramSocket();
 
         //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
-        new Thread(this::listenForMessages).start();
+        //todo new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
         new Thread(this::listenForUdpMessages).start();
     }
@@ -169,30 +177,30 @@ public class Agent {
                 // Acepta una conexión entrante
                 Socket incomingConnection = serverSocket.accept();
                 BufferedReader in = new BufferedReader(new InputStreamReader(incomingConnection.getInputStream()));
-                
+                String receivedMessage = in.toString();
                 // Leer el mensaje recibido
-                StringBuilder receivedMessageBuilder = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) {
-                    receivedMessageBuilder.append(line);
-                }
-                
-                // Convertir el mensaje a un String
-                String receivedMessage = receivedMessageBuilder.toString();
-                
+//                StringBuilder receivedMessageBuilder = new StringBuilder();
+//                String line;
+//                while ((line = in.readLine()) != null) {
+//                    receivedMessageBuilder.append(line);
+//                }
+//
+//                // Convertir el mensaje a un String
+//                String receivedMessage = receivedMessageBuilder.toString();
+
                 // Validar el mensaje XML
-                if (XMLParser.validateXml(receivedMessage)) {
+                if (validate(receivedMessage)) {
                     System.out.println("Received valid message:\n" + receivedMessage);
 
                     //Parseamos el mensaje
-                    Message mes = XMLParser.parseXmlMessage(receivedMessage);
+
 
                     //Mostramos el tipo de mensaje para que se gestione correctamente
-                    System.out.println("Tipo de mensaje:" + mes.getHeader().getTypeProtocol());
+                    System.out.println("Tipo de mensaje:" + getTypeProtocol(receivedMessage));
                 } else {
                     System.out.println("Mensaje descartado: No cumple con la estructura XML definida.");
                 }
-                
+
                 // Cierra la conexión una vez procesado el mensaje
                 incomingConnection.close();
             } catch (IOException e) {
@@ -240,20 +248,28 @@ public class Agent {
         try {
             // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
             BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-    
+
             // Pedir al usuario la IP de destino
             System.out.print("Enter target IP: ");
             String targetIp = reader.readLine();
-    
+
             // Pedir el puerto de destino
             System.out.print("Enter target port: ");
             int targetPort = Integer.parseInt(reader.readLine());
-    
+
             // Pedir el mensaje a enviar
             //  System.out.print("Enter message: ");
             //  String message = reader.readLine();
-            String message = this.createAgentMessageXml();
-    
+            //String message = this.createAgentMessageXml();
+            long originTime = System.currentTimeMillis();
+
+            //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+
+            String message = createXmlMessage("1", "2", "continua", 1, "UDP",Integer.toString(id)
+                    , ip, udpPort, serverPort,Long.toString(originTime) , "1",targetIp ,
+                    targetPort-2, targetPort+2, "1", "nada"
+            );
+
             // Llamar a sendMessage para enviar el mensaje
             sendMessage(targetIp, targetPort, message);
         } catch (Exception e) {
@@ -265,13 +281,22 @@ public class Agent {
     
     //Descubre agentes por fuerza bruta SOLO dentro de la red local, considerar red o rangos oportunos en su momento, pero cuidado con la seguridad...
     public void findAgents() {
-        String discoveryMessage = "DISCOVERY_REQUEST";
+        //String discoveryMessage = "DISCOVERY_REQUEST";
 
         try {
             InetAddress localAddress = InetAddress.getByName("127.0.0.1");
 
             // Bucle para enviar mensajes a puertos impares en el rango
             for (int port = 4001; port <= 4100; port += 2) {
+                long originTime = System.currentTimeMillis();
+
+                //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+
+                String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP",Integer.toString(id)
+                        , ip, udpPort, serverPort,Long.toString(originTime) , "1",localAddress.getHostName() ,
+                        port, port+2, "1", "nada"
+                );
+
                 byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
                 // Crear un paquete UDP con el mensaje de descubrimiento
@@ -308,13 +333,26 @@ public class Agent {
                 String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
                 InetAddress senderAddress = packet.getAddress();
                 int senderPort = packet.getPort();
-    
+
                 // Procesar el mensaje recibido
-                if (message.equals("DISCOVERY_REQUEST")) {
-                    handleDiscoveryRequest(senderAddress, senderPort);
-                } else if (message.startsWith("DISCOVERY_RESPONSE")) {
-                    registerAgent(senderAddress,senderPort);
+                if(validate(message)) {
+
+                    if(Objects.equals(getTypeProtocol(message), "hola")){
+
+                        handleDiscoveryRequest(senderAddress, senderPort);
+                    }if(Objects.equals(getTypeProtocol(message), "estoy")){
+                        registerAgent(senderAddress,senderPort);
+                    }
+                }else{
+                    System.out.println("El mensaje no ha sido validado");
                 }
+
+
+//                if (message.equals("DISCOVERY_REQUEST")) {
+//                    handleDiscoveryRequest(senderAddress, senderPort);
+//                } else if (message.startsWith("DISCOVERY_RESPONSE")) {
+//                    registerAgent(senderAddress,senderPort);
+//                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -324,7 +362,17 @@ public class Agent {
     public void handleDiscoveryRequest(InetAddress requesterAddress, int requesterPort) {
         try {
             // Crear un mensaje de respuesta con el ID y puerto TCP del agente
-            String responseMessage = "DISCOVERY_RESPONSE " + id + "," + serverPort;
+            //String responseMessage = "DISCOVERY_RESPONSE " + id + "," + serverPort;
+
+            long originTime = System.currentTimeMillis();
+
+            //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+
+            String responseMessage = createXmlMessage("1", "2", "estoy", 2, "UDP",Integer.toString(id)
+                    , ip, udpPort, serverPort,Long.toString(originTime) , "1",requesterAddress.getHostName() ,
+                    requesterPort, requesterPort+2, "1", "nada"
+            );
+
             byte[] responseData = responseMessage.getBytes(StandardCharsets.UTF_8);
     
             DatagramPacket responsePacket = new DatagramPacket(
@@ -351,82 +399,82 @@ public class Agent {
         }
     }
 
-    public String createAgentMessageXml() {
-        // Crear una instancia de Scanner para obtener entrada del usuario
-        Scanner scanner = new Scanner(System.in);
-
-        // Crear la instancia del mensaje
-        Message message = new Message();
-
-        // Pedir comunc_id y msg_id al usuario
-        System.out.print("Ingrese comunc_id: ");
-        message.setComuncId(scanner.nextLine());
-
-        System.out.print("Ingrese msg_id: ");
-        message.setMsgId(scanner.nextLine());
-
-        // Crear y llenar el encabezado
-        Header header = new Header();
-        System.out.print("Ingrese el tipo de protocolo (e.g., HOLA): ");
-        header.setTypeProtocol(TipoDeProtocolo.valueOf(scanner.nextLine().toUpperCase()));
-
-        System.out.print("Ingrese el paso del protocolo (protocol_step): ");
-        header.setProtocolStep(scanner.nextInt());
-        scanner.nextLine(); // Consumir la línea restante
-
-        System.out.print("Ingrese el protocolo de comunicación (TCP/UDP): ");
-        header.setComunicationProtocol(scanner.nextLine());
-
-        // Configurar la información de origen del mensaje con los atributos del agente
-        HeaderOriginInfo origin = new HeaderOriginInfo();
-        origin.setOriginId(String.valueOf(this.id));
-        origin.setOriginIp(this.ip);
-        origin.setOriginPortUDP(this.udpPort);
-        origin.setOriginPortTCP(this.serverPort);
-        origin.setOriginTime(this.ts);
-        header.setOrigin(origin);
-
-        // Pedir información de destino
-        HeaderDestinationInfo destination = new HeaderDestinationInfo();
-        System.out.print("Ingrese destination_id: ");
-        destination.setDestinationId(scanner.nextLine());
-
-        System.out.print("Ingrese destination_ip: ");
-        destination.setDestinationIp(scanner.nextLine());
-
-        System.out.print("Ingrese destination_port_UDP: ");
-        destination.setDestinationPortUDP(scanner.nextInt());
-
-        System.out.print("Ingrese destination_port_TCP: ");
-        destination.setDestinationPortTCP(scanner.nextInt());
-
-        System.out.print("Ingrese destination_time: ");
-        destination.setDestinationTime(scanner.nextLong());
-        scanner.nextLine(); // Consumir la línea restante
-
-        header.setDestination(destination);
-        message.setHeader(header);
-
-        // Crear el cuerpo del mensaje
-        Body body = new Body();
-        System.out.print("Ingrese el contenido del cuerpo (body_info): ");
-        body.setBodyInfo(scanner.nextLine());
-        message.setBody(body);
-
-        // Configurar el contenido común (dejar en blanco si no hay datos adicionales)
-        CommonContent commonContent = new CommonContent();
-        message.setCommonContent(commonContent);
-
-        // Crear el XML a partir del objeto Message
-        String xmlMessage = XMLParser.createXmlMessage(message);
-
-        // Imprimir el mensaje generado
-        System.out.println("Mensaje XML generado:\n" + xmlMessage);
-
-        // Retornar el XML como string
-        return xmlMessage;
-    }
-    
+//    public String createAgentMessageXml() {
+//        // Crear una instancia de Scanner para obtener entrada del usuario
+//        Scanner scanner = new Scanner(System.in);
+//
+//        // Crear la instancia del mensaje
+//        Message message = new Message();
+//
+//        // Pedir comunc_id y msg_id al usuario
+//        System.out.print("Ingrese comunc_id: ");
+//        message.setComuncId(scanner.nextLine());
+//
+//        System.out.print("Ingrese msg_id: ");
+//        message.setMsgId(scanner.nextLine());
+//
+//        // Crear y llenar el encabezado
+//        Header header = new Header();
+//        System.out.print("Ingrese el tipo de protocolo (e.g., HOLA): ");
+//        header.setTypeProtocol(TipoDeProtocolo.valueOf(scanner.nextLine().toUpperCase()));
+//
+//        System.out.print("Ingrese el paso del protocolo (protocol_step): ");
+//        header.setProtocolStep(scanner.nextInt());
+//        scanner.nextLine(); // Consumir la línea restante
+//
+//        System.out.print("Ingrese el protocolo de comunicación (TCP/UDP): ");
+//        header.setComunicationProtocol(scanner.nextLine());
+//
+//        // Configurar la información de origen del mensaje con los atributos del agente
+//        HeaderOriginInfo origin = new HeaderOriginInfo();
+//        origin.setOriginId(String.valueOf(this.id));
+//        origin.setOriginIp(this.ip);
+//        origin.setOriginPortUDP(this.udpPort);
+//        origin.setOriginPortTCP(this.serverPort);
+//        origin.setOriginTime(this.ts);
+//        header.setOrigin(origin);
+//
+//        // Pedir información de destino
+//        HeaderDestinationInfo destination = new HeaderDestinationInfo();
+//        System.out.print("Ingrese destination_id: ");
+//        destination.setDestinationId(scanner.nextLine());
+//
+//        System.out.print("Ingrese destination_ip: ");
+//        destination.setDestinationIp(scanner.nextLine());
+//
+//        System.out.print("Ingrese destination_port_UDP: ");
+//        destination.setDestinationPortUDP(scanner.nextInt());
+//
+//        System.out.print("Ingrese destination_port_TCP: ");
+//        destination.setDestinationPortTCP(scanner.nextInt());
+//
+//        System.out.print("Ingrese destination_time: ");
+//        destination.setDestinationTime(scanner.nextLong());
+//        scanner.nextLine(); // Consumir la línea restante
+//
+//        header.setDestination(destination);
+//        message.setHeader(header);
+//
+//        // Crear el cuerpo del mensaje
+//        Body body = new Body();
+//        System.out.print("Ingrese el contenido del cuerpo (body_info): ");
+//        body.setBodyInfo(scanner.nextLine());
+//        message.setBody(body);
+//
+//        // Configurar el contenido común (dejar en blanco si no hay datos adicionales)
+//        CommonContent commonContent = new CommonContent();
+//        message.setCommonContent(commonContent);
+//
+//        // Crear el XML a partir del objeto Message
+//        String xmlMessage = XMLParser.createXmlMessage(message);
+//
+//        // Imprimir el mensaje generado
+//        System.out.println("Mensaje XML generado:\n" + xmlMessage);
+//
+//        // Retornar el XML como string
+//        return xmlMessage;
+//    }
+//
 
     private void parar(){
         //con endoque de variable global y continue en los metodos de escucha
@@ -463,6 +511,172 @@ public class Agent {
         System.exit(0); // Termina el programa
     }
 
+
+
+    public static boolean validate(String xmlContent) {
+        String xsdFilePath = "cambiaCromosProyecto/src/XMLParser/esquema.xsd";  // Ruta al archivo XSD
+
+        // Crear una fábrica de esquemas que entienda XSD
+        SchemaFactory schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+
+        try {
+            // Cargar el esquema XSD
+            Schema schema = schemaFactory.newSchema(new File(xsdFilePath));
+
+            // Crear una instancia de Validator
+            Validator validator = schema.newValidator();
+
+            // Validar el contenido XML (desde la cadena) contra el esquema
+            validator.validate(new StreamSource(new StringReader(xmlContent)));
+            System.out.println("XML es válido contra el XSD.");
+            return true;
+
+        } catch (Exception e) {
+            System.out.println("XML no es válido: " + e.getMessage());
+            return false;
+        }
+    }
+
+
+
+    public static String createXmlMessage(String comucID, String msgID, String typeProtocol, int protocolStep,
+                                          String communicationProtocol, String originId, String originIp, int originPortUDP,
+                                          int originPortTCP, String originTime, String destinationId, String destinationIp,
+                                          int destinationPortUDP, int destinationPortTCP, String destinationTime, String bodyInfo) {
+        try {
+            // Configura el analizador de documentos
+            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+
+            // Crea el documento XML
+            Document doc = docBuilder.newDocument();
+            Element rootElement = doc.createElement("Message");
+            rootElement.setAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+            doc.appendChild(rootElement);
+            Element nodeComunc = doc.createElement("comunc_id");
+            nodeComunc.setTextContent(comucID);
+            rootElement.appendChild(nodeComunc);
+            Element nodeMesgID = doc.createElement("msg_id");
+            nodeMesgID.setTextContent(msgID);
+            rootElement.appendChild(nodeMesgID);
+
+            // Agrega los elementos al XML
+
+            // Elemento header
+            Element header = doc.createElement("header");
+            rootElement.appendChild(header);
+            Element typeP = doc.createElement("type_protocol");
+            typeP.setTextContent(typeProtocol);
+            header.appendChild(typeP);
+            Element protocols = doc.createElement("protocol_step");
+            protocols.setTextContent(Integer.toString(protocolStep));
+            header.appendChild(protocols);
+            Element communicationProtocolS = doc.createElement("comunication_protocol");
+            communicationProtocolS.setTextContent(communicationProtocol);
+            header.appendChild(communicationProtocolS);
+
+
+
+            // Elemento origin
+            Element origin = doc.createElement("origin");
+            header.appendChild(origin);
+
+            Element originID = doc.createElement("origin_id");
+            originID.setTextContent(originId);
+            origin.appendChild(originID);
+            Element originIP = doc.createElement("origin_ip");
+            originIP.setTextContent(originIp);
+            origin.appendChild(originIP);
+            Element originPort = doc.createElement("origin_port_UDP");
+            originPort.setTextContent(Integer.toString(originPortUDP));
+            origin.appendChild(originPort);
+            Element originPortp = doc.createElement("origin_port_TCP");
+            originPortp.setTextContent(Integer.toString(originPortTCP));
+            origin.appendChild(originPortp);
+            Element originT = doc.createElement("origin_time");
+            originT.setTextContent(originTime);
+            origin.appendChild(originT);
+
+            // Elemento destination
+            Element destination = doc.createElement("destination");
+            header.appendChild(destination);
+
+            Element destinationID = doc.createElement("destination_id");
+            destinationID.setTextContent(destinationId);
+            destination.appendChild(destinationID);
+            Element destinationIP = doc.createElement("destination_ip");
+            destinationIP.setTextContent(destinationIp);
+            destination.appendChild(destinationIP);
+            Element destinationPort = doc.createElement("destination_port_UDP");
+            destinationPort.setTextContent(Integer.toString(destinationPortUDP));
+            destination.appendChild(destinationPort);
+            Element destinationPortp = doc.createElement("destination_port_TCP");
+            destinationPortp.setTextContent(Integer.toString(destinationPortTCP));
+            destination.appendChild(destinationPortp);
+            Element destinationT = doc.createElement("destination_time");
+            destinationT.setTextContent(destinationTime);
+            destination.appendChild(destinationT);
+
+
+            // Elemento body
+            Element body = doc.createElement("body");
+            rootElement.appendChild(body);
+
+            Element bodyI = doc.createElement("body_info");
+            bodyI.setTextContent(bodyInfo);
+            body.appendChild(bodyI);
+
+
+            //createElement(doc, String.valueOf(body), "body_info", bodyInfo);
+
+            // Elemento common_content vacío
+            Element commonContent = doc.createElement("common_content");
+            rootElement.appendChild(commonContent);
+
+            // Convierte el documento en una cadena XML
+
+            StringWriter writer = new StringWriter();
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            transformer.transform(new DOMSource(doc), new StreamResult(writer));
+            String xmlString = writer.toString();
+            return xmlString;
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static String getTypeProtocol(String xmlContent) {
+        try {
+            // Configura el analizador XML
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+
+            // Parsear el contenido XML desde la cadena en lugar de un archivo
+            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
+
+            // Crea un objeto XPath para realizar la búsqueda en el documento
+            XPathFactory xPathFactory = XPathFactory.newInstance();
+            XPath xpath = xPathFactory.newXPath();
+
+            // Expresión XPath para obtener el elemento type_protocol
+            XPathExpression expression = xpath.compile("/Message/header/type_protocol");
+
+            // Busca el nodo type_protocol en el XML
+            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
+
+            // Retorna el contenido de type_protocol, o null si no se encuentra
+            return (node != null) ? node.getTextContent() : null;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
     public static void main(String[] args) {
         Agent agent = new Agent();
         System.out.println("Agent is running correctly:");
@@ -479,11 +693,11 @@ public class Agent {
             while (true) {
                 // Mostrar prompt de terminal
                 System.out.print(">> ");
-                
+
                 // Leer el comando
                 command = reader.readLine();
                 if (command == null) break;
-    
+
                 // Procesar el comando
                 if (command.equalsIgnoreCase("status")) {
                     agent.reporteEstado();
@@ -500,7 +714,7 @@ public class Agent {
             e.printStackTrace();
         }
     }
-    
+
 
 }   
 
