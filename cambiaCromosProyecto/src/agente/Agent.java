@@ -6,6 +6,8 @@ import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 
 import java.io.*;
+import java.lang.management.ManagementFactory;
+import com.sun.management.OperatingSystemMXBean;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -57,6 +59,9 @@ public class Agent {
     private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
 
+    //Para parar el agente
+    private final Object monitor_stop = new Object();
+    private boolean pausado;
 
     // Constructor
     public Agent() {
@@ -78,6 +83,7 @@ public class Agent {
 
         //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
         //todo new Thread(this::listenForMessages).start();
+        new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
         new Thread(this::listenForUdpMessages).start();
     }
@@ -173,11 +179,16 @@ public class Agent {
     // Valida que cumplan con la especificacion XML
     public void listenForMessages() {
         while (true) {
+
+            candado();
+
             try {
+
                 // Acepta una conexión entrante
                 Socket incomingConnection = serverSocket.accept();
                 BufferedReader in = new BufferedReader(new InputStreamReader(incomingConnection.getInputStream()));
-                String receivedMessage = in.toString();
+                String receivedMessage = in.readLine();
+                System.out.println(receivedMessage);
                 // Leer el mensaje recibido
 //                StringBuilder receivedMessageBuilder = new StringBuilder();
 //                String line;
@@ -197,6 +208,8 @@ public class Agent {
 
                     //Mostramos el tipo de mensaje para que se gestione correctamente
                     System.out.println("Tipo de mensaje:" + getTypeProtocol(receivedMessage));
+
+                    this.interpretarTipoMensaje(getTypeProtocol(receivedMessage));
                 } else {
                     System.out.println("Mensaje descartado: No cumple con la estructura XML definida.");
                 }
@@ -257,6 +270,11 @@ public class Agent {
             System.out.print("Enter target port: ");
             int targetPort = Integer.parseInt(reader.readLine());
 
+            System.out.print("Enter message type: ");
+            String messageType = reader.readLine();
+
+
+
             // Pedir el mensaje a enviar
             //  System.out.print("Enter message: ");
             //  String message = reader.readLine();
@@ -265,7 +283,7 @@ public class Agent {
 
             //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
-            String message = createXmlMessage("1", "2", "continua", 1, "UDP",Integer.toString(id)
+            String message = createXmlMessage("1", "2", messageType, 1, "UDP",Integer.toString(id)
                     , ip, udpPort, serverPort,Long.toString(originTime) , "1",targetIp ,
                     targetPort-2, targetPort+2, "1", "nada"
             );
@@ -282,36 +300,42 @@ public class Agent {
     //Descubre agentes por fuerza bruta SOLO dentro de la red local, considerar red o rangos oportunos en su momento, pero cuidado con la seguridad...
     public void findAgents() {
         //String discoveryMessage = "DISCOVERY_REQUEST";
+        while (true) {
+            candado();
+            try {
+                InetAddress localAddress = InetAddress.getByName("127.0.0.1");
 
-        try {
-            InetAddress localAddress = InetAddress.getByName("127.0.0.1");
+                // Bucle para enviar mensajes a puertos impares en el rango
+                for (int port = 4001; port <= 4100; port += 2) {
 
-            // Bucle para enviar mensajes a puertos impares en el rango
-            for (int port = 4001; port <= 4100; port += 2) {
-                long originTime = System.currentTimeMillis();
+                    if(port != this.udpPort) {
 
-                //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+                        long originTime = System.currentTimeMillis();
 
-                String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP",Integer.toString(id)
-                        , ip, udpPort, serverPort,Long.toString(originTime) , "1",localAddress.getHostName() ,
-                        port, port+2, "1", "nada"
-                );
+                        //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
-                byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
+                        String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
+                                , ip, udpPort, serverPort, Long.toString(originTime), "1", localAddress.getHostName(),
+                                port, port + 2, "1", "nada"
+                        );
 
-                // Crear un paquete UDP con el mensaje de descubrimiento
-                DatagramPacket packet = new DatagramPacket(
-                    messageData, messageData.length, localAddress, port);
+                        byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
-                // Enviar el paquete de descubrimiento
-                datagramSocket.send(packet);
+                        // Crear un paquete UDP con el mensaje de descubrimiento
+                        DatagramPacket packet = new DatagramPacket(
+                                messageData, messageData.length, localAddress, port);
+
+                        // Enviar el paquete de descubrimiento
+                        datagramSocket.send(packet);
+                    }
+                }
+
+
+                Thread.sleep(2000);
+
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-
-    
-            Thread.sleep(2000);
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
@@ -324,8 +348,9 @@ public class Agent {
     
         try {
             System.out.println("Listening for UDP messages...");
-    
+
             while (true) {
+                candado();
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
     
                 // Recibir un paquete UDP
@@ -379,7 +404,7 @@ public class Agent {
                 responseData, responseData.length, requesterAddress, requesterPort);
     
             datagramSocket.send(responsePacket);
-            System.out.println("Sent discovery response to " + requesterAddress + ":" + requesterPort);
+            //System.out.println("Sent discovery response to " + requesterAddress + ":" + requesterPort);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -393,9 +418,9 @@ public class Agent {
     
         if (!discoveredAgents.contains(agentInfo)) {
             discoveredAgents.add(agentInfo);
-            System.out.println("Registered new agent: " + agentInfo);
+            //System.out.println("Registered new agent: " + agentInfo);
         } else {
-            System.out.println("Agent already registered: " + agentInfo);
+            //System.out.println("Agent already registered: " + agentInfo);
         }
     }
 
@@ -476,13 +501,108 @@ public class Agent {
 //    }
 //
 
+    public void interpretarTipoMensaje(String tipo) {
+        switch(tipo) {
+            case "parate":
+                this.parar();
+                break;
+            case "continua":
+                this.continuar();
+                break;
+            case "autodestruyete":
+                this.autodestruccion();
+                break;
+            case "reproducete":
+                this.reproducirse();
+                break;
+            default:
+                System.out.println("Tipo de mensaje no implementado: " + tipo);
+        }
+    }
+
+    public void reproducirse() {
+        try {
+            // Obtener el bean del sistema operativo para comprobar la carga del sistema
+            OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
+            // Obtener la carga de CPU
+            double cpuLoad = osBean.getCpuLoad();
+
+            System.out.println("Carga de la CPU:" + cpuLoad);
+
+            // Obtener memoria física total y libre
+            long totalMemory = osBean.getTotalMemorySize();
+            long freeMemory = osBean.getFreeMemorySize();
+
+            System.out.println("% memoria libre:" + (double) freeMemory / totalMemory);
+
+            // Calcular el porcentaje de memoria libre
+            double freeMemoryPercentage = (double) freeMemory / totalMemory;
+
+            // Definir umbrales
+            double cpuThreshold = 0.80; // 80%
+            double memoryThreshold = 0.20; // 20%
+
+            // Comprobar si se superan los umbrales
+            if (cpuLoad >= cpuThreshold) {
+                System.out.println("No se puede lanzar una nueva instancia. La carga de CPU es demasiado alta: " + (cpuLoad * 100) + "%");
+                return;
+            }
+
+            if (freeMemoryPercentage <= memoryThreshold) {
+                System.out.println("No se puede lanzar una nueva instancia. La memoria disponible es insuficiente: " + (freeMemoryPercentage * 100) + "% libre");
+                return;
+            }
+
+            // Si los recursos son suficientes, lanzar un nuevo agente
+            String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+            String classPath = System.getProperty("java.class.path");
+            String className = this.getClass().getName();
+
+            ProcessBuilder builder = new ProcessBuilder(javaBin, "-cp", classPath, className);
+
+
+            //AVISAR AL MONITOR
+
+            builder.start();
+
+            System.out.println("Nueva instancia del agente lanzada exitosamente.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     private void parar(){
         //con endoque de variable global y continue en los metodos de escucha
+        synchronized (monitor_stop) {
+            pausado = true;
+            System.out.println("Agente parado.");
+        }
     }
 
     private void continuar(){
+
         //con enfoque de variable en el agente y continue en los metodos de escucha
+        synchronized (monitor_stop) {
+            pausado = false;
+            monitor_stop.notifyAll();
+            System.out.println("El agente va a continuar.");
+        }
+
+        //NOTIFICAR AL MONITOR
     }
+    private void candado(){
+        try{
+            synchronized (monitor_stop) {
+                while (pausado) {
+                    monitor_stop.wait();
+                }
+            }}catch(InterruptedException e){
+            e.printStackTrace();
+        }
+    }
+
 
     private void error(){
         //Hacemos que el agente aborte y mostramos el error qeu se ha producido
@@ -528,11 +648,11 @@ public class Agent {
 
             // Validar el contenido XML (desde la cadena) contra el esquema
             validator.validate(new StreamSource(new StringReader(xmlContent)));
-            System.out.println("XML es válido contra el XSD.");
+            //System.out.println("XML es válido contra el XSD.");
             return true;
 
         } catch (Exception e) {
-            System.out.println("XML no es válido: " + e.getMessage());
+            //System.out.println("XML no es válido: " + e.getMessage());
             return false;
         }
     }
@@ -706,7 +826,11 @@ public class Agent {
                     break; // Salir del bucle tras autodestrucción
                 } else if (command.equalsIgnoreCase("send")) {
                     agent.funcionDelAgente();
-                } else {
+                } else if (command.equalsIgnoreCase("reproducete")){
+                    agent.reproducirse();
+                }else if (command.equalsIgnoreCase("continua")){
+                    agent.continuar();}
+                else {
                     System.out.println("Unknown command. Available commands: 'status', 'send', 'exit'");
                 }
             }
