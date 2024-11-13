@@ -15,13 +15,13 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 
 import java.util.Scanner;
-
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
@@ -53,7 +53,7 @@ public class Agent {
     private long ts;
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
-    private Set<String> discoveredAgents = new HashSet<>(); //TODO: PONERLO COMO EN EL OTRO LAO REQUISITO 6
+    private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
 
     //Monitor info
     private final String monitorIP = "127.0.0.1";
@@ -71,15 +71,25 @@ public class Agent {
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
 
+        // TODO: Considerar cambiar a como lo dice el profesor (tipo A_2_1)
         //Pillamos un timestamp y definimos el id del agente con un hash
         this.ts = System.currentTimeMillis();
         this.id = generateHash(ip,this.serverPort,this.ts);
-        
+
         //Inicializamos el socket de servidor
         initializeServerSocket();
         
         //Inicalizamos el datagram socketç
         initializeDatagramSocket();
+
+        // Avisar al Monitor de que el agente ha nacido;
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
+        String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
+                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                monitorPort+1, monitorPort, "1", "nada"
+        );
+        sendToMonitor(message);
+        */
 
         //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
         //todo new Thread(this::listenForMessages).start();
@@ -138,8 +148,6 @@ public class Agent {
             serverSocket = new ServerSocket(this.serverPort);
             System.out.println("Server socket initialized on port " + this.serverPort);
 
-            //TODO: METODO HE NACIDO REQUISITO 5
-            //TODO: CREAR FUNCION PARA COMUNICARSE CON EL MONITOR
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -170,7 +178,9 @@ public class Agent {
             System.out.println("Message sent to " + targetIp + ":" + targetPort + " -> " + message);
             clientSocket.close();  // Cerrar el socket después de enviar el mensaje
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Agent unreachable, removing from agent list");
+            AgentKey k = new AgentKey(targetIp, targetPort);
+            discoveredAgents.remove(k);
             //Poner ERROR DEL AGENTE
         }
     }
@@ -222,7 +232,21 @@ public class Agent {
             }
         }
     }
-    
+
+    // Método para enviar un mensaje al Monitor
+    private void sendToMonitor(String msg){
+        try{
+            Socket socket = new Socket(monitorIP, monitorPort);
+            PrintWriter out = new PrintWriter(socket.getOutputStream(),true);
+            out.println(msg);
+            System.out.println("Message sent to monitor -> " + msg);
+
+        }catch(Exception e){
+            System.out.println("ERROR: UNREACHABLE MONITOR");
+            e.printStackTrace();
+        }
+    }
+
     // id creator 
     // NOTA: PARA UNOS MILES DE HASHES BIEN, PERO SI QUEREMOS CONSIDERAR UNOS 100.000 ENTONCES TENEMOS UN PROBLEMA, metemos SHA1 o algo asi y tirando
     private int generateHash(String ip, int port, long timestamp) {
@@ -248,8 +272,8 @@ public class Agent {
         if (discoveredAgents.isEmpty()) {
             System.out.println("  No agents discovered yet.");
         } else {
-            for (String agentInfo : discoveredAgents) {
-                System.out.println("  - " + agentInfo);
+            for (Map.Entry<AgentKey, AgentInfo> entry : discoveredAgents.entrySet()) {
+                System.out.println("  - " + entry.getKey() + ": " + entry.getValue());
             }
         }
         System.out.println("===========================");
@@ -284,7 +308,7 @@ public class Agent {
             //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
             String message = createXmlMessage("1", "2", messageType, 1, "UDP",Integer.toString(id)
-                    , ip, udpPort, serverPort,Long.toString(originTime) , "1",targetIp ,
+                    , ip, udpPort, serverPort,Long.toString(originTime) , "1", targetIp ,
                     targetPort-2, targetPort+2, "1", "nada"
             );
 
@@ -312,7 +336,20 @@ public class Agent {
 
                         long originTime = System.currentTimeMillis();
 
-                        //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+                        // Si tenemos el agente en nuestra lista le quitamos 1 a su ttl
+                        AgentKey k = new AgentKey(localAddress.getHostName(), port);
+                        if(discoveredAgents.containsKey(k)){
+                            discoveredAgents.get(k).searched();
+                            // Si con su nuevo ttl lo consideramos muerto, lo eliminamos
+                            if(!discoveredAgents.get(k).alive()){discoveredAgents.remove(k);}
+                        }
+
+                        /*
+                        destID se obtendría así, pero no creo que tenga sentido añadirlo al mensaje de descubrimiento,
+                        ya que no hay manera de saberlo antes de que el agente que has descubierto te lo diga.
+
+                        String destId = discoveredAgents.get(a).getId();
+                         */
 
                         String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
                                 , ip, udpPort, serverPort, Long.toString(originTime), "1", localAddress.getHostName(),
@@ -414,12 +451,20 @@ public class Agent {
     public void registerAgent(InetAddress agentAddress, int serverPort) {
         serverPort = serverPort - 1;
         String agentIp = agentAddress.getHostAddress();
-        String agentInfo = agentIp + ":" + serverPort;
+        AgentKey k = new AgentKey(agentIp, serverPort);
+        // TODO: Sacar la ID del mensaje recibido
+        AgentInfo v = new AgentInfo("EJEMPLO");
     
-        if (!discoveredAgents.contains(agentInfo)) {
-            discoveredAgents.add(agentInfo);
+        if (!discoveredAgents.containsKey(k)) {
+            discoveredAgents.put(k, v);
             //System.out.println("Registered new agent: " + agentInfo);
         } else {
+            // TODO: Cuando tenga la ID hacerlo así
+            // La id no es la misma, es otro agente
+            // if(!discoveredAgents.get(k).getId().equals(senderId)){
+            //     AgentInfo other = new AgentInfo("otraId");
+            // }else{ *la línea de abajo
+            discoveredAgents.get(k).answered();
             //System.out.println("Agent already registered: " + agentInfo);
         }
     }
@@ -502,21 +547,12 @@ public class Agent {
 //
 
     public void interpretarTipoMensaje(String tipo) {
-        switch(tipo) {
-            case "parate":
-                this.parar();
-                break;
-            case "continua":
-                this.continuar();
-                break;
-            case "autodestruyete":
-                this.autodestruccion();
-                break;
-            case "reproducete":
-                this.reproducirse();
-                break;
-            default:
-                System.out.println("Tipo de mensaje no implementado: " + tipo);
+        switch (tipo) {
+            case "parate" -> this.parar();
+            case "continua" -> this.continuar();
+            case "autodestruyete" -> this.autodestruccion();
+            case "reproducete" -> this.reproducirse();
+            default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
         }
     }
 
@@ -574,6 +610,15 @@ public class Agent {
 
 
     private void parar(){
+        // Mandar al monitor mensaje heParado
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
+        // Avisar al Monitor de que el agente ha parado;
+        String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
+                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                monitorPort+1, monitorPort, "1", "nada"
+        );
+        sendToMonitor(message);
+         */
         //con endoque de variable global y continue en los metodos de escucha
         synchronized (monitor_stop) {
             pausado = true;
@@ -626,7 +671,16 @@ public class Agent {
             datagramSocket.close();
             System.out.println("Datagram socket closed.");
         }
-    
+
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
+        // Avisar al Monitor de que el agente muere;
+        String message = createXmlMessage("1", "1","meMuero", 1, "TCP",
+                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                monitorPort+1, monitorPort, "1", "nada"
+        );
+        sendToMonitor(message);
+         */
+
         // Detener el proceso del agente
         System.exit(0); // Termina el programa
     }
