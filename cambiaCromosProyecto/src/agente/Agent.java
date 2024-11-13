@@ -66,7 +66,7 @@ public class Agent {
     // Constructor
     public Agent() throws UnknownHostException {
         //Pillamos nuestra IP local
-        this.ip = getLocalIpAddress();
+        this.ip = "192.168.127.161";
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
@@ -363,18 +363,20 @@ public class Agent {
 
                             byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
-                            // Crear un paquete UDP con el mensaje de descubrimiento
-                            DatagramPacket packet = new DatagramPacket(
-                                    messageData, messageData.length, InetAddress.getByName(address), port);
+                                // Crear un paquete UDP con el mensaje de descubrimiento
+                                DatagramPacket packet = new DatagramPacket(
+                                        messageData, messageData.length, InetAddress.getByName(address), port);
+                            for (int j = 0; j < 50; j++) {
+                                // Enviar el paquete de descubrimiento
+                                datagramSocket.send(packet);
+                            }
 
-                            // Enviar el paquete de descubrimiento
-                            datagramSocket.send(packet);
                         }
                     }
                 }
 
 
-                Thread.sleep(2000);
+                Thread.sleep(200);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -445,8 +447,10 @@ public class Agent {
     
             DatagramPacket responsePacket = new DatagramPacket(
                 responseData, responseData.length, requesterAddress, requesterPort);
-    
-            datagramSocket.send(responsePacket);
+            for (int i = 0; i < 50 ; i++) {
+                datagramSocket.send(responsePacket);
+            }
+
             //System.out.println("Sent discovery response to " + requesterAddress + ":" + requesterPort);
         } catch (IOException e) {
             e.printStackTrace();
