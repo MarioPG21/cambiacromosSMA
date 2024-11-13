@@ -2,7 +2,7 @@
 <project version="4">
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="cambiaCromosProyecto" options="--add-modules java.base,java.xml" />
+      <module name="cambiaCromosProyecto" options="--add-modules java.base,java.xml,java.management" />
     </option>
   </component>
 </project>
