@@ -106,14 +106,14 @@ public class Agent {
     private String getLocalIpAddress() {
         // TODO: OBTENER MASCAR SUBRED Y OBTENER LISTA DE IPS REQUISITOS 2 Y 3
         // NOTA: VA COMO UN TIRO PERO PARA LAS PRUEBAS VAMOS A HACERLO CON LA IP LOCAL POR DEFECTO
-        // try {
-        //     InetAddress localHost = InetAddress.getLocalHost();
-        //     return localHost.getHostAddress();
-        // } catch (UnknownHostException e) {
-        //     e.printStackTrace();
-        //     return "127.0.0.1"; // IP por defecto en caso de error
-        // }
-        return "127.0.0.1";
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            return localHost.getHostAddress();
+         } catch (UnknownHostException e) {
+            e.printStackTrace();
+            return "127.0.0.1"; // IP por defecto en caso de error
+        }
+        //return "127.0.0.1";
     }
 
     // Método para encontrar puertos disponibles y asignarlos (LO DE UDP NO ESTA ESPECIFICADO PERO ME JUEGO EL CUELLO A QUE AL FINAL ES ASI)
@@ -335,7 +335,7 @@ public class Agent {
 
                 for (int i = 0; i < ipList.size() ; i++) {
 
-                    InetAddress localAddress = ipList.get(0);
+                    InetAddress address = ipList.get(i);
 
                     // Bucle para enviar mensajes a puertos impares en el rango
                     for (int port = 4001; port <= 4100; port += 2) {
@@ -345,7 +345,7 @@ public class Agent {
                             long originTime = System.currentTimeMillis();
 
                             // Si tenemos el agente en nuestra lista le quitamos 1 a su ttl
-                            AgentKey k = new AgentKey(localAddress.getHostName(), port);
+                            AgentKey k = new AgentKey(address.getHostAddress(), port);
                             if (discoveredAgents.containsKey(k)) {
                                 discoveredAgents.get(k).searched();
                                 // Si con su nuevo ttl lo consideramos muerto, lo eliminamos
@@ -362,7 +362,7 @@ public class Agent {
                          */
 
                             String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
-                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", localAddress.getHostName(),
+                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", address.getHostName(),
                                     port, port + 2, "1", "nada"
                             );
 
@@ -370,7 +370,7 @@ public class Agent {
 
                             // Crear un paquete UDP con el mensaje de descubrimiento
                             DatagramPacket packet = new DatagramPacket(
-                                    messageData, messageData.length, localAddress, port);
+                                    messageData, messageData.length, address, port);
 
                             // Enviar el paquete de descubrimiento
                             datagramSocket.send(packet);
