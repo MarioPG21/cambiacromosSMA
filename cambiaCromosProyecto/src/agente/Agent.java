@@ -54,7 +54,7 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-
+    private ArrayList<InetAddress> ipList = new ArrayList<InetAddress>();
     //Monitor info
     private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
@@ -64,7 +64,7 @@ public class Agent {
     private boolean pausado;
 
     // Constructor
-    public Agent() {
+    public Agent() throws UnknownHostException {
         //Pillamos nuestra IP local
         this.ip = getLocalIpAddress();
 
@@ -76,6 +76,10 @@ public class Agent {
         this.ts = System.currentTimeMillis();
         this.id = generateHash(ip,this.serverPort,this.ts);
 
+        this.ipList.add(InetAddress.getByName("192.168.127.227"));
+        this.ipList.add(InetAddress.getByName("192.168.127.83"));
+        this.ipList.add(InetAddress.getByName("192.168.127.161"));
+        this.ipList.add(InetAddress.getByName("192.168.127.212"));
         //Inicializamos el socket de servidor
         initializeServerSocket();
         
@@ -188,6 +192,7 @@ public class Agent {
     // Metodo ejecutado en un hilo para escuchar todos los mensajes TCP entrantes con el socket inicializado
     // Valida que cumplan con la especificacion XML
     public void listenForMessages() {
+
         while (true) {
 
             candado();
@@ -327,22 +332,27 @@ public class Agent {
         while (true) {
             candado();
             try {
-                InetAddress localAddress = InetAddress.getByName("127.0.0.1");
 
-                // Bucle para enviar mensajes a puertos impares en el rango
-                for (int port = 4001; port <= 4100; port += 2) {
+                for (int i = 0; i < ipList.size() ; i++) {
 
-                    if(port != this.udpPort) {
+                    InetAddress localAddress = ipList.get(0);
 
-                        long originTime = System.currentTimeMillis();
+                    // Bucle para enviar mensajes a puertos impares en el rango
+                    for (int port = 4001; port <= 4100; port += 2) {
 
-                        // Si tenemos el agente en nuestra lista le quitamos 1 a su ttl
-                        AgentKey k = new AgentKey(localAddress.getHostName(), port);
-                        if(discoveredAgents.containsKey(k)){
-                            discoveredAgents.get(k).searched();
-                            // Si con su nuevo ttl lo consideramos muerto, lo eliminamos
-                            if(!discoveredAgents.get(k).alive()){discoveredAgents.remove(k);}
-                        }
+                        if (port != this.udpPort) {
+
+                            long originTime = System.currentTimeMillis();
+
+                            // Si tenemos el agente en nuestra lista le quitamos 1 a su ttl
+                            AgentKey k = new AgentKey(localAddress.getHostName(), port);
+                            if (discoveredAgents.containsKey(k)) {
+                                discoveredAgents.get(k).searched();
+                                // Si con su nuevo ttl lo consideramos muerto, lo eliminamos
+                                if (!discoveredAgents.get(k).alive()) {
+                                    discoveredAgents.remove(k);
+                                }
+                            }
 
                         /*
                         destID se obtendría así, pero no creo que tenga sentido añadirlo al mensaje de descubrimiento,
@@ -351,19 +361,20 @@ public class Agent {
                         String destId = discoveredAgents.get(a).getId();
                          */
 
-                        String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
-                                , ip, udpPort, serverPort, Long.toString(originTime), "1", localAddress.getHostName(),
-                                port, port + 2, "1", "nada"
-                        );
+                            String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
+                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", localAddress.getHostName(),
+                                    port, port + 2, "1", "nada"
+                            );
 
-                        byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
+                            byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
-                        // Crear un paquete UDP con el mensaje de descubrimiento
-                        DatagramPacket packet = new DatagramPacket(
-                                messageData, messageData.length, localAddress, port);
+                            // Crear un paquete UDP con el mensaje de descubrimiento
+                            DatagramPacket packet = new DatagramPacket(
+                                    messageData, messageData.length, localAddress, port);
 
-                        // Enviar el paquete de descubrimiento
-                        datagramSocket.send(packet);
+                            // Enviar el paquete de descubrimiento
+                            datagramSocket.send(packet);
+                        }
                     }
                 }
 
@@ -851,7 +862,7 @@ public class Agent {
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws UnknownHostException {
         Agent agent = new Agent();
         System.out.println("Agent is running correctly:");
 
