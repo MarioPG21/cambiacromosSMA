@@ -54,7 +54,7 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<InetAddress> ipList = new ArrayList<InetAddress>();
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.127.227", "192.168.127.83", "192.168.127.161", "192.168.127.212"));
     //Monitor info
     private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
@@ -75,11 +75,6 @@ public class Agent {
         //Pillamos un timestamp y definimos el id del agente con un hash
         this.ts = System.currentTimeMillis();
         this.id = generateHash(ip,this.serverPort,this.ts);
-
-        this.ipList.add(InetAddress.getByName("192.168.127.227"));
-        this.ipList.add(InetAddress.getByName("192.168.127.83"));
-        this.ipList.add(InetAddress.getByName("192.168.127.161"));
-        this.ipList.add(InetAddress.getByName("192.168.127.212"));
         //Inicializamos el socket de servidor
         initializeServerSocket();
         
@@ -335,17 +330,17 @@ public class Agent {
 
                 for (int i = 0; i < ipList.size() ; i++) {
 
-                    InetAddress address = ipList.get(i);
+                    String address = ipList.get(i);
 
                     // Bucle para enviar mensajes a puertos impares en el rango
-                    for (int port = 4001; port <= 4100; port += 2) {
+                    for (int port = 4001; port <= 4101; port += 2) {
 
-                        if (port != this.udpPort) {
+                        if (port != this.udpPort || !address.equals(ip)) {
 
                             long originTime = System.currentTimeMillis();
 
                             // Si tenemos el agente en nuestra lista le quitamos 1 a su ttl
-                            AgentKey k = new AgentKey(address.getHostAddress(), port);
+                            AgentKey k = new AgentKey(address, port);
                             if (discoveredAgents.containsKey(k)) {
                                 discoveredAgents.get(k).searched();
                                 // Si con su nuevo ttl lo consideramos muerto, lo eliminamos
@@ -362,15 +357,16 @@ public class Agent {
                          */
 
                             String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
-                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", address.getHostName(),
+                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", address,
                                     port, port + 2, "1", "nada"
                             );
 
                             byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
+                            System.out.println("Enviando mensaje a: "+address+", "+port);
                             // Crear un paquete UDP con el mensaje de descubrimiento
                             DatagramPacket packet = new DatagramPacket(
-                                    messageData, messageData.length, address, port);
+                                    messageData, messageData.length, InetAddress.getByName(address), port);
 
                             // Enviar el paquete de descubrimiento
                             datagramSocket.send(packet);
