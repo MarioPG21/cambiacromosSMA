@@ -83,11 +83,13 @@ public class Agent {
         initializeDatagramSocket();
 
         // Avisar al Monitor de que el agente ha nacido;
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
         String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
+        */
 
         //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
         //todo new Thread(this::listenForMessages).start();
@@ -239,7 +241,7 @@ public class Agent {
             out.println(msg);
             System.out.println("Message sent to monitor -> " + msg);
 
-        }catch(IOException e){
+        }catch(Exception e){
             System.out.println("ERROR: UNREACHABLE MONITOR");
             e.printStackTrace();
         }
@@ -609,12 +611,14 @@ public class Agent {
 
     private void parar(){
         // Mandar al monitor mensaje heParado
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
         // Avisar al Monitor de que el agente ha parado;
         String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
+         */
         //con endoque de variable global y continue en los metodos de escucha
         synchronized (monitor_stop) {
             pausado = true;
@@ -668,12 +672,14 @@ public class Agent {
             System.out.println("Datagram socket closed.");
         }
 
+        /* TODO: quitar comentario cuando tengamos monitor funcionando
         // Avisar al Monitor de que el agente muere;
         String message = createXmlMessage("1", "1","meMuero", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
+         */
 
         // Detener el proceso del agente
         System.exit(0); // Termina el programa
