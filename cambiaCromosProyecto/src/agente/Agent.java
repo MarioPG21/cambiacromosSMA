@@ -106,14 +106,13 @@ public class Agent {
     private String getLocalIpAddress() {
         // TODO: OBTENER MASCAR SUBRED Y OBTENER LISTA DE IPS REQUISITOS 2 Y 3
         // NOTA: VA COMO UN TIRO PERO PARA LAS PRUEBAS VAMOS A HACERLO CON LA IP LOCAL POR DEFECTO
-        // try {
-        //     InetAddress localHost = InetAddress.getLocalHost();
-        //     return localHost.getHostAddress();
-        // } catch (UnknownHostException e) {
-        //     e.printStackTrace();
-        //     return "127.0.0.1"; // IP por defecto en caso de error
-        // }
-        return "127.0.0.1";
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            return localHost.getHostAddress();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+            return "127.0.0.1"; // IP por defecto en caso de error
+        }
     }
 
     // Método para encontrar puertos disponibles y asignarlos (LO DE UDP NO ESTA ESPECIFICADO PERO ME JUEGO EL CUELLO A QUE AL FINAL ES ASI)
@@ -335,10 +334,10 @@ public class Agent {
 
                 for (int i = 0; i < ipList.size() ; i++) {
 
-                    InetAddress localAddress = ipList.get(0);
+                    InetAddress localAddress = ipList.get(i);
 
                     // Bucle para enviar mensajes a puertos impares en el rango
-                    for (int port = 4001; port <= 4100; port += 2) {
+                    for (int port = 4001; port <= 4101; port += 2) {
 
                         if (port != this.udpPort) {
 
