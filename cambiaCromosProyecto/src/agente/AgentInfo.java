@@ -9,7 +9,7 @@ public class AgentInfo {
 
     public AgentInfo(String t){
         this.id = t;
-        ttl = 20;
+        ttl = 2000;
     }
 
     public String getId(){

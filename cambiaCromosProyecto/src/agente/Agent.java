@@ -66,7 +66,7 @@ public class Agent {
     // Constructor
     public Agent() throws UnknownHostException {
         //Pillamos nuestra IP local
-        this.ip = "192.168.127.161";
+        this.ip = "192.168.127.227";
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
@@ -408,7 +408,7 @@ public class Agent {
                 if(validate(message)) {
 
                     if(Objects.equals(getTypeProtocol(message), "hola")){
-
+                        registerAgent(senderAddress,senderPort);
                         handleDiscoveryRequest(senderAddress, senderPort);
                     }if(Objects.equals(getTypeProtocol(message), "estoy")){
                         registerAgent(senderAddress,senderPort);
