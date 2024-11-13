@@ -363,7 +363,6 @@ public class Agent {
 
                             byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
 
-                            System.out.println("Enviando mensaje a: "+address+", "+port);
                             // Crear un paquete UDP con el mensaje de descubrimiento
                             DatagramPacket packet = new DatagramPacket(
                                     messageData, messageData.length, InetAddress.getByName(address), port);
