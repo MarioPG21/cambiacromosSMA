@@ -54,7 +54,7 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.127.227", "192.168.127.83", "192.168.127.161", "192.168.127.212"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.0.12"));
     //Monitor info
     private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
@@ -66,7 +66,7 @@ public class Agent {
     // Constructor
     public Agent() throws UnknownHostException {
         //Pillamos nuestra IP local
-        this.ip = "192.168.127.227";
+        this.ip = "192.168.0.12";
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
@@ -304,11 +304,14 @@ public class Agent {
             //  String message = reader.readLine();
             //String message = this.createAgentMessageXml();
             long originTime = System.currentTimeMillis();
+            AgentKey k = new AgentKey(targetIp, targetPort);
+            String destID = "";
+            if (discoveredAgents.containsKey(k)) {destID = discoveredAgents.get(k).getId();}
 
-            //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+            //TODO cambiar comID, msgID ya que no tengo la lista de agentes
 
             String message = createXmlMessage("1", "2", messageType, 1, "UDP",Integer.toString(id)
-                    , ip, udpPort, serverPort,Long.toString(originTime) , "1", targetIp ,
+                    , ip, udpPort, serverPort,Long.toString(originTime) , destID, targetIp ,
                     targetPort-2, targetPort+2, "1", "nada"
             );
 
@@ -355,9 +358,10 @@ public class Agent {
 
                         String destId = discoveredAgents.get(a).getId();
                          */
-
+                            String destID = "";
+                            if (discoveredAgents.containsKey(k)) {destID = discoveredAgents.get(k).getId();}
                             String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
-                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", address,
+                                    , ip, udpPort, serverPort, Long.toString(originTime), destID, address,
                                     port, port + 2, "1", "nada"
                             );
 
@@ -438,8 +442,12 @@ public class Agent {
 
             //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
+            AgentKey k = new AgentKey(requesterAddress.toString(), requesterPort);
+            String destID = "";
+            if (discoveredAgents.containsKey(k)) {destID = discoveredAgents.get(k).getId();}
+
             String responseMessage = createXmlMessage("1", "2", "estoy", 2, "UDP",Integer.toString(id)
-                    , ip, udpPort, serverPort,Long.toString(originTime) , "1",requesterAddress.getHostName() ,
+                    , ip, udpPort, serverPort,Long.toString(originTime) , destID,requesterAddress.getHostName() ,
                     requesterPort, requesterPort+2, "1", "nada"
             );
 
