@@ -41,10 +41,6 @@ import javax.xml.xpath.XPathFactory;
 
 public class Agent {
 
-    //TODO: CAMBIAR TIPO DE MENSAJE DE DESCUBRIMIENTO, PONERLO EN XML REQUISITO 7
-
-    //TODO: FUNCIONES BASICAS REQUISITO 10
-    
     // Atributos o propiedades de la clase
     private int id;
     private String ip;
@@ -54,9 +50,9 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.127.227", "192.168.127.83", "192.168.127.161", "192.168.127.212"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.133", "192.168.1.135"));
     //Monitor info
-    private final String monitorIP = "127.0.0.1";
+    private final String monitorIP = "192.168.1.133";
     private final int monitorPort = 4300;
 
     //Para parar el agente
@@ -82,13 +78,12 @@ public class Agent {
         initializeDatagramSocket();
 
         // Avisar al Monitor de que el agente ha nacido;
-        /* TODO: quitar comentario cuando tengamos monitor funcionando
         String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
-        */
+
 
         //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
         //todo new Thread(this::listenForMessages).start();
@@ -111,7 +106,7 @@ public class Agent {
         //return "127.0.0.1";
     }
 
-    // Método para encontrar puertos disponibles y asignarlos (LO DE UDP NO ESTA ESPECIFICADO PERO ME JUEGO EL CUELLO A QUE AL FINAL ES ASI)
+    // Método para encontrar puertos disponibles y asignarlos
     private void findPorts() {
         int serverPort = 4000;  // Inicio en el rango de puertos especificado
         while (serverPort <= 4100) {  // Hasta el final del rango especificado
@@ -124,14 +119,12 @@ public class Agent {
             serverPort += 2;  // Avanza al siguiente par
         }
         if (this.serverPort == 0 || this.udpPort == 0) {
-            //PONER AQUI LO DE ERROR DEL AGENTE A LO MEJOR A VER COMO LO IMPLEMENTO
             throw new RuntimeException("No se encontraron puertos disponibles.");
         }
     }
 
 
     // Comprueba si un puerto está disponible
-    // NOTA: NOOO DEJAA EL SOCKET ACTIVO SOLO LO COMPRUEBO
     private boolean isPortAvailable(int port) {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             serverSocket.setReuseAddress(true);
@@ -150,7 +143,6 @@ public class Agent {
 
         } catch (IOException e) {
             e.printStackTrace();
-            //PONER ERROR DEL AGENTE
         }
     }
 
@@ -167,7 +159,6 @@ public class Agent {
 
 
     // Método para enviar un mensaje a otro agente usando TCP
-    // Nota lo de tener socket abierto para mandar mensajes una mierda, que sea dinámico y ya esta que es como siempre se hace
     public void sendMessage(String targetIp, int targetPort, String message) {
         try {
             // Inicializar el socket de cliente conectado al puerto de destino
@@ -190,8 +181,6 @@ public class Agent {
 
         while (true) {
 
-            candado();
-
             try {
 
                 // Acepta una conexión entrante
@@ -199,25 +188,13 @@ public class Agent {
                 BufferedReader in = new BufferedReader(new InputStreamReader(incomingConnection.getInputStream()));
                 String receivedMessage = in.readLine();
                 System.out.println(receivedMessage);
-                // Leer el mensaje recibido
-//                StringBuilder receivedMessageBuilder = new StringBuilder();
-//                String line;
-//                while ((line = in.readLine()) != null) {
-//                    receivedMessageBuilder.append(line);
-//                }
-//
-//                // Convertir el mensaje a un String
-//                String receivedMessage = receivedMessageBuilder.toString();
 
                 // Validar el mensaje XML
                 if (validate(receivedMessage)) {
                     System.out.println("Received valid message:\n" + receivedMessage);
 
-                    //Parseamos el mensaje
-
-
                     //Mostramos el tipo de mensaje para que se gestione correctamente
-                    System.out.println("Tipo de mensaje:" + getTypeProtocol(receivedMessage));
+                    //System.out.println("Tipo de mensaje:" + getTypeProtocol(receivedMessage));
 
                     this.interpretarTipoMensaje(getTypeProtocol(receivedMessage));
                 } else {
@@ -235,20 +212,29 @@ public class Agent {
 
     // Método para enviar un mensaje al Monitor
     private void sendToMonitor(String msg){
+        Socket socket = null;
+        PrintWriter out = null;
         try{
-            Socket socket = new Socket(monitorIP, monitorPort);
-            PrintWriter out = new PrintWriter(socket.getOutputStream(),true);
+            socket = new Socket(monitorIP, monitorPort);
+            out = new PrintWriter(socket.getOutputStream(), true);
             out.println(msg);
-            System.out.println("Message sent to monitor -> " + msg);
-
-        }catch(Exception e){
+            out.flush(); // Asegurar que el mensaje se envía
+        } catch(Exception e) {
             System.out.println("ERROR: UNREACHABLE MONITOR");
             e.printStackTrace();
+        } finally {
+            // Cerrar recursos
+            try {
+                if (out != null) out.close();
+                if (socket != null && !socket.isClosed()) socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
+
     // id creator 
-    // NOTA: PARA UNOS MILES DE HASHES BIEN, PERO SI QUEREMOS CONSIDERAR UNOS 100.000 ENTONCES TENEMOS UN PROBLEMA, metemos SHA1 o algo asi y tirando
     private int generateHash(String ip, int port, long timestamp) {
         String combinedString = ip + ":" + port + ":" + timestamp;
         return combinedString.hashCode() & 0x7FFFFFFF;
@@ -282,46 +268,44 @@ public class Agent {
 
     //Por ahora solo manda mensajes con formato XML o sin el 
     public void funcionDelAgente() {
-        try {
-            // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
-            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        if(!pausado) {
+            try {
+                // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
+                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
-            // Pedir al usuario la IP de destino
-            System.out.print("Enter target IP: ");
-            String targetIp = reader.readLine();
+                // Pedir al usuario la IP de destino
+                System.out.print("Enter target IP: ");
+                String targetIp = reader.readLine();
 
-            // Pedir el puerto de destino
-            System.out.print("Enter target port: ");
-            int targetPort = Integer.parseInt(reader.readLine());
+                // Pedir el puerto de destino
+                System.out.print("Enter target port: ");
+                int targetPort = Integer.parseInt(reader.readLine());
 
-            System.out.print("Enter message type: ");
-            String messageType = reader.readLine();
+                System.out.print("Enter message type: ");
+                String messageType = reader.readLine();
 
+                long originTime = System.currentTimeMillis();
 
+                //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
-            // Pedir el mensaje a enviar
-            //  System.out.print("Enter message: ");
-            //  String message = reader.readLine();
-            //String message = this.createAgentMessageXml();
-            long originTime = System.currentTimeMillis();
+                String message = createXmlMessage("1", "2", messageType, 1, "UDP", Integer.toString(id)
+                        , ip, udpPort, serverPort, Long.toString(originTime), "1", targetIp,
+                        targetPort - 2, targetPort + 2, "1", "nada"
+                );
 
-            //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
-
-            String message = createXmlMessage("1", "2", messageType, 1, "UDP",Integer.toString(id)
-                    , ip, udpPort, serverPort,Long.toString(originTime) , "1", targetIp ,
-                    targetPort-2, targetPort+2, "1", "nada"
-            );
-
-            // Llamar a sendMessage para enviar el mensaje
-            sendMessage(targetIp, targetPort, message);
-        } catch (Exception e) {
-            System.out.println("An error occurred while sending the message.");
-            e.printStackTrace();
+                // Llamar a sendMessage para enviar el mensaje
+                sendMessage(targetIp, targetPort, message);
+            } catch (Exception e) {
+                System.out.println("An error occurred while sending the message.");
+                e.printStackTrace();
+            }
+        }else{
+            System.out.println("\nEl agente esta parado y por lo tanto la funcion del agente tambien.\n");
         }
     }
 
     
-    //Descubre agentes por fuerza bruta SOLO dentro de la red local, considerar red o rangos oportunos en su momento, pero cuidado con la seguridad...
+    //Descubre agentes por fuerza bruta
     public void findAgents() {
         //String discoveryMessage = "DISCOVERY_REQUEST";
         while (true) {
@@ -395,7 +379,6 @@ public class Agent {
             System.out.println("Listening for UDP messages...");
 
             while (true) {
-                candado();
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
     
                 // Recibir un paquete UDP
@@ -416,13 +399,6 @@ public class Agent {
                 }else{
                     System.out.println("El mensaje no ha sido validado");
                 }
-
-
-//                if (message.equals("DISCOVERY_REQUEST")) {
-//                    handleDiscoveryRequest(senderAddress, senderPort);
-//                } else if (message.startsWith("DISCOVERY_RESPONSE")) {
-//                    registerAgent(senderAddress,senderPort);
-//                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -431,9 +407,6 @@ public class Agent {
 
     public void handleDiscoveryRequest(InetAddress requesterAddress, int requesterPort) {
         try {
-            // Crear un mensaje de respuesta con el ID y puerto TCP del agente
-            //String responseMessage = "DISCOVERY_RESPONSE " + id + "," + serverPort;
-
             long originTime = System.currentTimeMillis();
 
             //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
@@ -479,90 +452,18 @@ public class Agent {
         }
     }
 
-//    public String createAgentMessageXml() {
-//        // Crear una instancia de Scanner para obtener entrada del usuario
-//        Scanner scanner = new Scanner(System.in);
-//
-//        // Crear la instancia del mensaje
-//        Message message = new Message();
-//
-//        // Pedir comunc_id y msg_id al usuario
-//        System.out.print("Ingrese comunc_id: ");
-//        message.setComuncId(scanner.nextLine());
-//
-//        System.out.print("Ingrese msg_id: ");
-//        message.setMsgId(scanner.nextLine());
-//
-//        // Crear y llenar el encabezado
-//        Header header = new Header();
-//        System.out.print("Ingrese el tipo de protocolo (e.g., HOLA): ");
-//        header.setTypeProtocol(TipoDeProtocolo.valueOf(scanner.nextLine().toUpperCase()));
-//
-//        System.out.print("Ingrese el paso del protocolo (protocol_step): ");
-//        header.setProtocolStep(scanner.nextInt());
-//        scanner.nextLine(); // Consumir la línea restante
-//
-//        System.out.print("Ingrese el protocolo de comunicación (TCP/UDP): ");
-//        header.setComunicationProtocol(scanner.nextLine());
-//
-//        // Configurar la información de origen del mensaje con los atributos del agente
-//        HeaderOriginInfo origin = new HeaderOriginInfo();
-//        origin.setOriginId(String.valueOf(this.id));
-//        origin.setOriginIp(this.ip);
-//        origin.setOriginPortUDP(this.udpPort);
-//        origin.setOriginPortTCP(this.serverPort);
-//        origin.setOriginTime(this.ts);
-//        header.setOrigin(origin);
-//
-//        // Pedir información de destino
-//        HeaderDestinationInfo destination = new HeaderDestinationInfo();
-//        System.out.print("Ingrese destination_id: ");
-//        destination.setDestinationId(scanner.nextLine());
-//
-//        System.out.print("Ingrese destination_ip: ");
-//        destination.setDestinationIp(scanner.nextLine());
-//
-//        System.out.print("Ingrese destination_port_UDP: ");
-//        destination.setDestinationPortUDP(scanner.nextInt());
-//
-//        System.out.print("Ingrese destination_port_TCP: ");
-//        destination.setDestinationPortTCP(scanner.nextInt());
-//
-//        System.out.print("Ingrese destination_time: ");
-//        destination.setDestinationTime(scanner.nextLong());
-//        scanner.nextLine(); // Consumir la línea restante
-//
-//        header.setDestination(destination);
-//        message.setHeader(header);
-//
-//        // Crear el cuerpo del mensaje
-//        Body body = new Body();
-//        System.out.print("Ingrese el contenido del cuerpo (body_info): ");
-//        body.setBodyInfo(scanner.nextLine());
-//        message.setBody(body);
-//
-//        // Configurar el contenido común (dejar en blanco si no hay datos adicionales)
-//        CommonContent commonContent = new CommonContent();
-//        message.setCommonContent(commonContent);
-//
-//        // Crear el XML a partir del objeto Message
-//        String xmlMessage = XMLParser.createXmlMessage(message);
-//
-//        // Imprimir el mensaje generado
-//        System.out.println("Mensaje XML generado:\n" + xmlMessage);
-//
-//        // Retornar el XML como string
-//        return xmlMessage;
-//    }
-//
 
     public void interpretarTipoMensaje(String tipo) {
-        switch (tipo) {
-            case "parate" -> this.parar();
-            case "continua" -> this.continuar();
-            case "autodestruyete" -> this.autodestruccion();
-            case "reproducete" -> this.reproducirse();
-            default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
+        if (!this.pausado || tipo.equals("continua")) {
+            switch (tipo) {
+                case "parate" -> this.parar();
+                case "continua" -> this.continuar();
+                case "autodestruyete" -> this.autodestruccion();
+                case "reproducete" -> this.reproducirse();
+                default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
+            }
+        }else{
+            System.out.println("\nEl agente esta parado, actualmente la unica accion que recibe es continuar\n" );
         }
     }
 
@@ -620,19 +521,17 @@ public class Agent {
 
 
     private void parar(){
-        // Mandar al monitor mensaje heParado
-        /* TODO: quitar comentario cuando tengamos monitor funcionando
-        // Avisar al Monitor de que el agente ha parado;
-        String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
+        // Manda al monitor mensaje heParado
+        String message = createXmlMessage("1", "1","parado", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
-         */
-        //con endoque de variable global y continue en los metodos de escucha
+
+        //con enfoque de variable global y continue en los metodos de escucha
         synchronized (monitor_stop) {
             pausado = true;
-            System.out.println("Agente parado.");
+            System.out.println("\nAgente parado.\n");
         }
     }
 
@@ -642,10 +541,14 @@ public class Agent {
         synchronized (monitor_stop) {
             pausado = false;
             monitor_stop.notifyAll();
-            System.out.println("El agente va a continuar.");
+            System.out.println("\nEl agente va a continuar.\n");
         }
 
-        //NOTIFICAR AL MONITOR
+        String message = createXmlMessage("1", "1","continua", 1, "TCP",
+                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                monitorPort+1, monitorPort, "1", "nada"
+        );
+        sendToMonitor(message);
     }
     private void candado(){
         try{
@@ -664,7 +567,7 @@ public class Agent {
     }
 
     public void autodestruccion() {
-        System.out.println("Agent is self-destructing...");
+        System.out.println("El agente se esta autodestruyendo...");
     
         // Detener el servidor de escucha
         try {
@@ -682,14 +585,20 @@ public class Agent {
             System.out.println("Datagram socket closed.");
         }
 
-        /* TODO: quitar comentario cuando tengamos monitor funcionando
         // Avisar al Monitor de que el agente muere;
         String message = createXmlMessage("1", "1","meMuero", 1, "TCP",
                 Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
-         */
+
+        // Esperamos un poco para que el mensaje se mande correctamente que si no puede dar problemas con la gestion del socket
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
 
         // Detener el proceso del agente
         System.exit(0); // Termina el programa
