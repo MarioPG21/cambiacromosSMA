@@ -6,6 +6,8 @@ import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.lang.management.ManagementFactory;
 import com.sun.management.OperatingSystemMXBean;
 import java.net.InetAddress;
@@ -42,17 +44,18 @@ import javax.xml.xpath.XPathFactory;
 public class Agent {
 
     // Atributos o propiedades de la clase
-    private int id;
+    private String id;
     private String ip;
+    private int num_sons = 0;
     private int serverPort = 0;
     private int udpPort = 0;
     private long ts;
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.133", "192.168.1.135"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.238"/*, "192.168.1.135"*/));
     //Monitor info
-    private final String monitorIP = "192.168.1.133";
+    private final String monitorIP = "192.168.1.238";
     private final int monitorPort = 4300;
 
     //Para parar el agente
@@ -60,33 +63,34 @@ public class Agent {
     private boolean pausado;
 
     // Constructor
-    public Agent() throws UnknownHostException {
-        //Pillamos nuestra IP local
+    public Agent(String id) throws UnknownHostException {
+        // Pillamos nuestra IP local
         this.ip = "192.168.127.227";
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
 
         // TODO: Considerar cambiar a como lo dice el profesor (tipo A_2_1)
-        //Pillamos un timestamp y definimos el id del agente con un hash
+        // Pillamos un timestamp
         this.ts = System.currentTimeMillis();
-        this.id = generateHash(ip,this.serverPort,this.ts);
-        //Inicializamos el socket de servidor
+        // El ID se recibe como parámetro
+        this.id = id;
+        // Inicializamos el socket de servidor
         initializeServerSocket();
         
-        //Inicalizamos el datagram socketç
+        // Inicializamos el datagram socket
         initializeDatagramSocket();
 
         // Avisar al Monitor de que el agente ha nacido;
         String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
-                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
 
 
-        //Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
-        //todo new Thread(this::listenForMessages).start();
+        // Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
+        // todo new Thread(this::listenForMessages).start();
         new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
         new Thread(this::listenForUdpMessages).start();
@@ -234,14 +238,15 @@ public class Agent {
     }
 
 
-    // id creator 
+    /* id creator
     private int generateHash(String ip, int port, long timestamp) {
         String combinedString = ip + ":" + port + ":" + timestamp;
         return combinedString.hashCode() & 0x7FFFFFFF;
     }
+    */
 
     // Método para obtener el ID
-    public int getId() {
+    public String getId() {
         return id;
     }
 
@@ -288,7 +293,7 @@ public class Agent {
 
                 //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
-                String message = createXmlMessage("1", "2", messageType, 1, "UDP", Integer.toString(id)
+                String message = createXmlMessage("1", "2", messageType, 1, "UDP", id
                         , ip, udpPort, serverPort, Long.toString(originTime), "1", targetIp,
                         targetPort - 2, targetPort + 2, "1", "nada"
                 );
@@ -340,7 +345,7 @@ public class Agent {
                         String destId = discoveredAgents.get(a).getId();
                          */
 
-                            String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", Integer.toString(id)
+                            String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", id
                                     , ip, udpPort, serverPort, Long.toString(originTime), "1", address,
                                     port, port + 2, "1", "nada"
                             );
@@ -411,7 +416,7 @@ public class Agent {
 
             //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
 
-            String responseMessage = createXmlMessage("1", "2", "estoy", 2, "UDP",Integer.toString(id)
+            String responseMessage = createXmlMessage("1", "2", "estoy", 2, "UDP", id
                     , ip, udpPort, serverPort,Long.toString(originTime) , "1",requesterAddress.getHostName() ,
                     requesterPort, requesterPort+2, "1", "nada"
             );
@@ -508,6 +513,10 @@ public class Agent {
 
             ProcessBuilder builder = new ProcessBuilder(javaBin, "-cp", classPath, className);
 
+            // Aumenta su número de hijos y le pasa a su hijo la ID que usará
+            this.num_sons ++;
+            String childID = this.id + "_" + this.num_sons;
+            builder.command().add(childID);
 
             //AVISAR AL MONITOR
 
@@ -523,7 +532,7 @@ public class Agent {
     private void parar(){
         // Manda al monitor mensaje heParado
         String message = createXmlMessage("1", "1","parado", 1, "TCP",
-                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
@@ -545,7 +554,7 @@ public class Agent {
         }
 
         String message = createXmlMessage("1", "1","continua", 1, "TCP",
-                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
@@ -587,7 +596,7 @@ public class Agent {
 
         // Avisar al Monitor de que el agente muere;
         String message = createXmlMessage("1", "1","meMuero", 1, "TCP",
-                Integer.toString(id), ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
+                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
                 monitorPort+1, monitorPort, "1", "nada"
         );
         sendToMonitor(message);
@@ -770,8 +779,54 @@ public class Agent {
         }
     }
 
+    public static int getNum(String filepath){
+        try{
+            // Usamos esta clase que tiene acceso aleatorio en vez de las tradicionales con acceso secuencial
+            // (BufferedReader y BufferedWriter p. ej.)
+            // porque de esta manera podemos leer y actualizar el número de agente con una sola clase.
+            RandomAccessFile file = new RandomAccessFile(filepath, "rw");
+            FileChannel chn = file.getChannel();
+            String s;
+            int num;
+            // Bloquea archivo
+            FileLock lock = chn.lock();
+
+            try{
+                // Lee el número
+                s = file.readLine();
+                num = Integer.parseInt(s);
+                // Actualiza el número del archivo
+                file.setLength(0);
+                file.writeBytes(String.valueOf(num+1));
+                // Devuelve numero
+                return num;
+            }finally {
+                // Desbloquea archivo
+                lock.release();
+            }
+
+        }catch(IOException e){
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
     public static void main(String[] args) throws UnknownHostException {
-        Agent agent = new Agent();
+        String agentID;
+
+        // Si tenemos un ID en args, el agente es hijo
+        if(args.length > 0){
+            // Es hijo, usaremos el argumento como ID
+            agentID = args[0];
+        }else{
+            // No es hijo de ningún agente, construimos su ID a partir de un fichero.
+            String filepath = "cambiaCromosProyecto/src/agente/num_ag.txt";
+            int num = getNum(filepath);
+            agentID = "AG_"+ num;
+        }
+        System.out.println(agentID);
+
+        Agent agent = new Agent(agentID);
         System.out.println("Agent is running correctly:");
 
         try {
