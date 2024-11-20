@@ -394,12 +394,12 @@ public class Agent {
 
                 // Procesar el mensaje recibido
                 if(validate(message)) {
-                    id = getSenderId(message);
+                    String i = getSenderId(message);
                     if(Objects.equals(getTypeProtocol(message), "hola")){
-                        registerAgent(senderAddress,senderPort, id);
+                        registerAgent(senderAddress,senderPort, i);
                         handleDiscoveryRequest(senderAddress, senderPort);
                     }if(Objects.equals(getTypeProtocol(message), "estoy")){
-                        registerAgent(senderAddress,senderPort, id);
+                        registerAgent(senderAddress,senderPort, i);
                     }
                 }else{
                     System.out.println("El mensaje no ha sido validado");
@@ -436,12 +436,12 @@ public class Agent {
     }
     
 
-    public void registerAgent(InetAddress agentAddress, int serverPort, String id) {
+    public void registerAgent(InetAddress agentAddress, int serverPort, String i) {
         serverPort = serverPort - 1;
         String agentIp = agentAddress.getHostAddress();
         AgentKey k = new AgentKey(agentIp, serverPort);
         // TODO: Sacar la ID del mensaje recibido
-        AgentInfo v = new AgentInfo(id);
+        AgentInfo v = new AgentInfo(i);
     
         if (!discoveredAgents.containsKey(k)) {
             discoveredAgents.put(k, v);
