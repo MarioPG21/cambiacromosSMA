@@ -149,16 +149,16 @@ public class Monitor {
                     // Dependiendo del tipo, imprimir el mensaje correspondiente
                     switch (type) {
                         case "heNacido":
-                            System.out.println("El agente " + originId + " acaba de nacer.");
+                            System.out.println("El agente " + originId + " acaba de nacer en " + clientSocket.getInetAddress().getHostAddress());
                             break;
                         case "parado":
-                            System.out.println("El agente " + originId + " se va a parar.");
+                            System.out.println("El agente " + originId + " se va a parar en " + clientSocket.getInetAddress().getHostAddress());
                             break;
                         case "continua":
-                            System.out.println("El agente " + originId + " va a continuar.");
+                            System.out.println("El agente " + originId + " va a continuar en " + clientSocket.getInetAddress().getHostAddress());
                             break;
                         case "meMuero":
-                            System.out.println("El agente " + originId + " se va a morir.");
+                            System.out.println("El agente " + originId + " se va a morir en " + clientSocket.getInetAddress().getHostAddress());
                             break;
                         default:
                             System.out.println("Tipo de mensaje desconocido de " + originId + ": " + type);

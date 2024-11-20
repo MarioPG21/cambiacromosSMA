@@ -53,9 +53,9 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.238"/*, "192.168.1.135"*/));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.199.83", "192.168.199.227", "192.168.199.212", "192.168.199.161"));
     //Monitor info
-    private final String monitorIP = "192.168.1.238";
+    private final String monitorIP = "192.168.199.83";
     private final int monitorPort = 4300;
 
     //Para parar el agente
@@ -394,12 +394,12 @@ public class Agent {
 
                 // Procesar el mensaje recibido
                 if(validate(message)) {
-
+                    id = getSenderId(message);
                     if(Objects.equals(getTypeProtocol(message), "hola")){
-                        registerAgent(senderAddress,senderPort);
+                        registerAgent(senderAddress,senderPort, id);
                         handleDiscoveryRequest(senderAddress, senderPort);
                     }if(Objects.equals(getTypeProtocol(message), "estoy")){
-                        registerAgent(senderAddress,senderPort);
+                        registerAgent(senderAddress,senderPort, id);
                     }
                 }else{
                     System.out.println("El mensaje no ha sido validado");
@@ -436,12 +436,12 @@ public class Agent {
     }
     
 
-    public void registerAgent(InetAddress agentAddress, int serverPort) {
+    public void registerAgent(InetAddress agentAddress, int serverPort, String id) {
         serverPort = serverPort - 1;
         String agentIp = agentAddress.getHostAddress();
         AgentKey k = new AgentKey(agentIp, serverPort);
         // TODO: Sacar la ID del mensaje recibido
-        AgentInfo v = new AgentInfo("EJEMPLO");
+        AgentInfo v = new AgentInfo(id);
     
         if (!discoveredAgents.containsKey(k)) {
             discoveredAgents.put(k, v);
@@ -774,6 +774,34 @@ public class Agent {
             return (node != null) ? node.getTextContent() : null;
 
         } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static String getSenderId(String xmlContent) {
+        try {
+            // Configura el analizador XML
+
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+
+            // Parsear el contenido XML desde la cadena en lugar de un archivo
+            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
+
+            // Crea un objeto XPath para realizar la búsqueda en el documento
+            XPathFactory xPathFactory = XPathFactory.newInstance();
+            XPath xpath = xPathFactory.newXPath();
+
+            // Expresión XPath para obtener el elemento type_protocol
+            XPathExpression expression = xpath.compile("/Message/header/origin/origin_id");
+
+            // Busca el nodo type_protocol en el XML
+            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
+
+            // Retorna el contenido de type_protocol, o null si no se encuentra
+            return (node != null) ? node.getTextContent() : null;
+        }catch (Exception e){
             e.printStackTrace();
             return null;
         }
