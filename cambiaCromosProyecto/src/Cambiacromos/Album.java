@@ -8,8 +8,10 @@ import java.util.Random;
 
 // En la colección hay los siguientes sets: 5 de 10 cartas, que serán sets básicos y aportarán un valor adicional fácilmente modificable. 5 de 10 cartas que serán los raros y que aportarán un valor fácilmente modificable.
 
-// TODO: Sobre de inicio
-// Se debe crear una lista de los 100 cromos distintas con sus valores asignados. Una función en el constructor rellena el álbum con 50 cromos iniciales, obtenidos aleatoriamente en base a su probabilidad de aparición.
+//TODO: gestión de repetidos al abrir sobre de inicio
+
+// Sobre de inicio
+// Una función en el constructor rellena el álbum con 50 cromos iniciales, obtenidos aleatoriamente en base a su probabilidad de aparición en la lista de colección.
 
 // TODO: Definir sets
 // Se debe aplicar el valor adicional de un set al álbum.
@@ -21,6 +23,7 @@ import java.util.Random;
 
 
 public class Album {
+    // COLECCION es la lista de cromos completa
     private static final List<Cromo> COLECCION = generarCromos();
 
     private List<Cromo> tengo; // lista de cromos
@@ -33,9 +36,10 @@ public class Album {
         this.lista_deseados = new ArrayList<>();
         this.lista_ofrezco = new ArrayList<>();
         this.valorTotal = 0;
-        abrirSobreInicial();
+        abrirSobreInicial(5);
     }
 
+    // Método que genera la colección de 100 cromos en base a las especificaciones escritas.
     private static List<Cromo> generarCromos() {
         List<Cromo> cromos = new ArrayList<>();
         List<Double> probabilidades = new ArrayList<>();
@@ -74,8 +78,9 @@ public class Album {
         return cromos;
     }
 
-    private void abrirSobreInicial() {
-        for (int n = 0; n < 51; n++) {
+    // Método que genera 'cantidad' cartas aleatorias de la lista de cartas
+    private void abrirSobreInicial(int cantidad) {
+        for (int n = 0; n < cantidad+1; n++) {
             // Lista de probabilidades acumuladas. Convierte las probabilidades individuales en un rango, formado entre su propia probabilidad y la anterior.
             // Por ejemplo, si la probabilidad de las dos primeras cartas es 1%, p_acumuladas[0] = 1 y p_acumuladas[1] = 2.
             double[] p_acumuladas = new double[COLECCION.size()];
