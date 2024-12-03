@@ -266,7 +266,6 @@ public class Album {
         }
 
     }
-
     @Override
     public String toString() {
         return "Album{" +
@@ -274,7 +273,6 @@ public class Album {
                 ", valorTotal=" + valorTotal +
                 '}';
     }
-
     public static void main(String[] args) {
         Random random = new Random();
         Album album = new Album(10);
