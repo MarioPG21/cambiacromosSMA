@@ -1,5 +1,6 @@
 package Cambiacromos;
 
+// Esta clase sirve únicamente para ordenar las listas de prioridad de la clase Album.
 public class OrdenCromo {
     public Cromo cromo;
     public double orden;
