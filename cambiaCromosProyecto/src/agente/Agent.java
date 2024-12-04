@@ -53,9 +53,9 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.199.83", "192.168.199.227", "192.168.199.212", "192.168.199.161"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.105.83", "192.168.105.227", "192.168.105.161"));
     //Monitor info
-    private final String monitorIP = "192.168.199.83";
+    private final String monitorIP = "192.168.105.83";
     private final int monitorPort = 4300;
 
     //Para parar el agente
@@ -65,7 +65,7 @@ public class Agent {
     // Constructor
     public Agent(String id) throws UnknownHostException {
         // Pillamos nuestra IP local
-        this.ip = "192.168.127.227";
+        this.ip = "192.168.105.161";
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
@@ -208,7 +208,7 @@ public class Agent {
                 // Cierra la conexión una vez procesado el mensaje
                 incomingConnection.close();
             } catch (IOException e) {
-                e.printStackTrace();
+//                e.printStackTrace();
                 break;
             }
         }
@@ -368,7 +368,7 @@ public class Agent {
                 Thread.sleep(200);
 
             } catch (Exception e) {
-                e.printStackTrace();
+//                e.printStackTrace();
             }
         }
     }
@@ -406,7 +406,7 @@ public class Agent {
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+//            e.printStackTrace();
         }
     }
 

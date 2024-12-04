@@ -1,0 +1,112 @@
+<?xml version="1.0"  encoding="UTF-8" ?>
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="Message">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element type="xs:string" name="comunc_id"/>  <!-- Contiene la informacion que identifica el acto de comunicacion al que pertenece el mensaje -->
+                <xs:element type="xs:string" name="msg_id"/> <!--  Contiene un identificador unico del mensaje dentro de este acto de comunicacion -->
+
+                <xs:element name="header">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element type="tipo_de_protocolo" name="type_protocol"/> <!-- Identifica el protocolo asociado al mensaje (los tipos protocolos se indican en la descripcion del tipo)  -->
+                            <xs:element type="xs:integer" name="protocol_step"/> <!-- Identifica el ordinal del paso en el protocolo asociado al mensaje  -->
+                            <xs:element type="xs:string" name="comunication_protocol"/> <!-- Identifica si el mensaje debe transmitirse por TCP o UDP  -->
+                            <xs:element type="header_origin_info" name="origin"/> <!-- Identifica la informacion referente al emisor del mensaje -->
+
+                            <xs:element type="header_destination_info" name="destination"/> <!-- Identifica la informacion referente al receptor del mensaje -->
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+                <xs:element name="body"> <!-- El contenido especifico del mensaje -->
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element type="xs:string" name="intercambio_cromos"/>  <!-- Para cualificar el contenido especifico del mensaje (a definir mas adelante) -->
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+                <xs:element name="common_content"> <!-- El contenido del mensaje (a definir mas adelante) -->
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name= "cromos_ofrecidos"> <!--Cromos ofrecidos por el agente-->
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name= "cromo">
+                                           <xs:complexType>
+                                                <xs:sequence>
+                                                   <xs:element type= "xs:string" name= "id"/> <!--Identificador del cromo-->
+                                                   <xs:element type= "xs:string" name= "rareza" /> <!--Rareza del cromo-->
+                                                   <xs:element type= "xs:integer" name= "rupias"/> <!--Valor en rupias del cromo-->
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="cromos_deseados"> <!--Cromos deseados por el agente-->
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name= "cromo">
+                                           <xs:complexType>
+                                                <xs:sequence>
+                                                   <xs:element type= "xs:string" name= "id"/> <!--Identificador del cromo-->
+                                                   <xs:element type= "xs:string" name= "rareza" /> <!--Rareza del cromo-->
+                                                   <xs:element type= "xs:integer" name= "rupias"/> <!--Valor en rupias del cromo-->
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element type="xs:integer" name="rupias"/> <!--Rupias ofrecidas (quien no las quiera usar las puede poner a 0)-->
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:simpleType name="tipo_de_protocolo"> <!-- Define los tipos de protocolos posibles -->
+        <xs:restriction base="xs:string">
+            <!-- Protocolos asociados al comportamiento basico -->
+            <xs:enumeration value="reproducete"/>
+            <xs:enumeration value="heNacido"/>
+            <xs:enumeration value="parate"/>
+            <xs:enumeration value="parado"/>
+            <xs:enumeration value="continua"/>
+            <xs:enumeration value="continuo"/>
+            <xs:enumeration value="autodestruyete"/>
+            <xs:enumeration value="meMuero"/>
+            <xs:enumeration value="hola"/>
+            <xs:enumeration value="estoy"/>
+            <!-- Protocolos asociados al intercambio -->
+            <xs:enumeration value="acepto"/>
+            <xs:enumeration value="rechazo"/>
+            <xs:enumeration value="en_progreso"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="header_origin_info"> <!-- Informacion referente al emisor del mensaje -->
+        <xs:sequence>
+            <xs:element type="xs:string" name="origin_id"/> <!-- Identificador unico del agente emisor -->
+            <xs:element type="xs:string" name="origin_ip"/> <!-- ip del agente emisor -->
+            <xs:element type="xs:integer" name="origin_port_UDP"/> <!-- el puerto del emmisor por el que se realiza la conexion, si se transmite por UDP -->
+            <xs:element type="xs:integer" name="origin_port_TCP"/> <!-- el puerto del emmisor por el que se realiza la conexion, si se transmite por TCP -->
+            <xs:element type="xs:long" name="origin_time"/> <!-- momento en el que se emite el mensaje, segun el reloj del emisor -->
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="header_destination_info"> <!-- Informacion referente al receptor del mensaje -->
+        <xs:sequence>
+            <xs:element type="xs:string" name="destination_id"/> <!-- Identificador unico del agente receptor -->
+            <xs:element type="xs:string" name="destination_ip"/> <!-- ip del agente receptor -->
+            <xs:element type="xs:integer" name="destination_port_UDP"/> <!-- el puerto del receptor por el que se realiza la conexion, si se transmite por UDP -->
+            <xs:element type="xs:integer" name="destination_port_TCP"/> <!-- el puerto del receptor por el que se realiza la conexion, si se transmite por TCP -->
+            <xs:element type="xs:long" name="destination_time"/> <!-- momento en el que se recibe el mensaje, segun el reloj del receptor -->
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

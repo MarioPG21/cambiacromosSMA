@@ -1,20 +1,47 @@
 package monitor;
-
+import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
 import java.net.*;
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.xml.parsers.*;
 import javax.xml.xpath.*;
+
+import agente.AgentInfo;
+import agente.AgentKey;
 import org.w3c.dom.*;
 import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.*;
 import javax.xml.XMLConstants;
 import org.xml.sax.InputSource;
 
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+
 public class Monitor {
 
+    private static int num_agents = 0;
+    private static ConcurrentHashMap<AgentKey_Monitor, AgentInfo_Monitor> agents = new ConcurrentHashMap<>();
+    private static JTable tabla;
+    private static String[] columnas = {"Agente", "Número de cartas", "Sets Completados", "Felicidad"};
+    private static Object[][] datos = {
+            {"Total", 0, 0, 0},
+    };
+    private static DefaultTableModel modelo = new DefaultTableModel(datos, columnas);
     public static void main(String[] args) {
         int port = 4300;
+
         try {
+
+
+            // Crear la JTable con el modelo
+            tabla = new JTable(modelo);
+            crearTabla();
             ServerSocket serverSocket = new ServerSocket(port);
             System.out.println("Monitor está escuchando en el puerto " + port);
 
@@ -83,6 +110,52 @@ public class Monitor {
         }
     }
 
+    public static void crearTabla() {
+        JFrame frame = new JFrame("Estado del Sistema");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(600, 400); // Tamaño ajustado para mejor visualización
+        frame.setLayout(new BorderLayout());
+
+        // Mejoras visuales
+        tabla.setRowHeight(30); // Altura de las filas
+        tabla.setGridColor(Color.LIGHT_GRAY); // Color de las líneas de la tabla
+        tabla.setFont(new Font("SansSerif", Font.PLAIN, 14)); // Fuente
+        tabla.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 16)); // Fuente del encabezado
+        tabla.getTableHeader().setBackground(new Color(100, 149, 237)); // Fondo del encabezado (azul)
+        tabla.getTableHeader().setForeground(Color.WHITE); // Color del texto del encabezado
+
+        // Centrar texto en las celdas
+        DefaultTableCellRenderer centrado = new DefaultTableCellRenderer();
+        centrado.setHorizontalAlignment(SwingConstants.CENTER);
+        for (int i = 0; i < tabla.getColumnCount(); i++) {
+            tabla.getColumnModel().getColumn(i).setCellRenderer(centrado);
+        }
+
+        // Ajustar el ancho de las columnas
+        tabla.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+
+        // Agregar la tabla a un JScrollPane para el desplazamiento
+        JScrollPane scrollPane = new JScrollPane(tabla);
+
+        JButton actualizarBtn = new JButton("Prueba actualizar Tabla");
+        actualizarBtn.addActionListener(e -> {
+            // Nuevos datos para actualizar la tabla
+
+
+            agents.put(new AgentKey_Monitor(Integer.toString(num_agents)),new AgentInfo_Monitor(Integer.toString(num_agents),45,2,8));
+            num_agents += 1;
+            actualizarTabla(); // Llamar al método de actualización
+        });
+
+
+
+
+        frame.add(scrollPane, BorderLayout.CENTER);
+        frame.add(actualizarBtn, BorderLayout.SOUTH);
+        // Mostrar el marco
+        frame.setVisible(true);
+    }
+
     // Función para extraer el origin_id del contenido XML
     public static String getOriginId(String xmlContent) {
         try {
@@ -110,6 +183,98 @@ public class Monitor {
             e.printStackTrace();
             return null;
         }
+    }
+
+    public static void ActualizarInfo(String xmlContent, String id) {
+
+        try {
+            // Configura el analizador XML
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+
+            // Parsear el contenido XML desde la cadena
+            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
+
+            // Crea un objeto XPath para realizar la búsqueda en el documento
+            XPathFactory xPathFactory = XPathFactory.newInstance();
+            XPath xpath = xPathFactory.newXPath();
+
+            // Expresión XPath para obtener el elemento origin_id
+            XPathExpression expression_felicidad = xpath.compile("Cambiarparacuandoesteelnuevoxsd");
+            // Busca el nodo origin_id en el XML
+            Node node_felicidad = (Node) expression_felicidad.evaluate(doc, XPathConstants.NODE);
+
+            // Retorna el contenido de origin_id, o null si no se encuentra
+            String felicidad = (node_felicidad != null) ? node_felicidad.getTextContent() : null;
+
+
+            // Expresión XPath para obtener el elemento origin_id
+            XPathExpression expression_num_cromos = xpath.compile("Cambiarparacuandoesteelnuevoxsd");
+            // Busca el nodo origin_id en el XML
+            Node node_num_cromos = (Node) expression_num_cromos.evaluate(doc, XPathConstants.NODE);
+
+            // Retorna el contenido de origin_id, o null si no se encuentra
+            String num_cromos = (node_num_cromos != null) ? node_num_cromos.getTextContent() : null;
+
+
+
+            // Expresión XPath para obtener el elemento origin_id
+            XPathExpression expression_num_sets = xpath.compile("Cambiarparacuandoesteelnuevoxsd");
+            // Busca el nodo origin_id en el XML
+            Node node_num_sets = (Node) expression_num_sets.evaluate(doc, XPathConstants.NODE);
+
+            // Retorna el contenido de origin_id, o null si no se encuentra
+            String num_sets = (node_num_sets != null) ? node_num_sets.getTextContent() : null;
+
+            if (!agents.containsKey(id)) {
+                agents.put(new AgentKey_Monitor(id), new AgentInfo_Monitor(id,Integer.parseInt(felicidad),Integer.parseInt(num_sets),Integer.parseInt(num_cromos)));
+                actualizarTabla();
+            } else {
+                actualizarTabla();
+            }
+
+
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+        }
+    }
+
+
+    public static void actualizarTabla() {
+
+        modelo.setRowCount(0);
+        modelo.setRowCount(0);
+        int total_agentes = agents.size();
+        int total_felicidades = 0;
+        int total_sets = 0;
+        int total_cromos = 0;
+        ArrayList<Object[]> listaDatos = new ArrayList<>();
+
+
+
+        for (Map.Entry<AgentKey_Monitor, AgentInfo_Monitor> entry : agents.entrySet()) {
+
+            Object[] dato = {entry.getValue().getId(), entry.getValue().getNumCromos(),entry.getValue().getNumSets_Completados(), entry.getValue().getFelicidad()};
+            listaDatos.add(dato);
+
+            total_felicidades+= entry.getValue().getFelicidad();
+            total_cromos+= entry.getValue().getNumCromos();
+            total_sets+= entry.getValue().getNumSets_Completados();
+
+        }
+
+        total_felicidades = total_felicidades / total_agentes;
+        Object[] dato = {"Total", total_cromos,total_sets,total_felicidades};
+        listaDatos.add(0,dato);
+        Object[][] arrayDatos = listaDatos.toArray(new Object[0][0]);
+
+        for (Object[] fila : arrayDatos) {
+            modelo.addRow(fila);
+        }
+
     }
 
     // Clase para manejar cada cliente conectado
@@ -145,6 +310,8 @@ public class Monitor {
                     if (originId == null || originId.isEmpty()) {
                         originId = clientSocket.getInetAddress().getHostAddress();
                     }
+
+
 
                     // Dependiendo del tipo, imprimir el mensaje correspondiente
                     switch (type) {
