@@ -22,19 +22,21 @@ import java.util.*;
 
 public class Album {
     // COLECCION es la lista de cromos completa.
-    private static final List<Cromo> COLECCION = generarCromos();
+    public static final List<Cromo> COLECCION = generarCromos();
 
-    private List<Cromo> tengo; // lista de cromos
-    private List<Cromo> lista_deseados; // lista de los 10 cromos que no forman parte de la colección y que nos aportarían un valor total mayor al actual.
-    private List<Cromo> lista_ofrezco; // lista de los 10 cromos que forman parte de la colección que menos valor total nos harían perder si faltasen.
+    public List<Cromo> tengo; // lista de cromos
+    public List<Cromo> lista_deseados; // lista de los 10 cromos que no forman parte de la colección y que nos aportarían un valor total mayor al actual.
+    public List<Cromo> lista_ofrezco; // lista de los 10 cromos que forman parte de la colección que menos valor total nos harían perder si faltasen.
 
-    private double valorTotal; // valor de cada carta en la lista de cromos a demás del valor de los sets completados
+    public double valorTotal; // valor de cada carta en la lista de cromos a demás del valor de los sets completados
 
-    private boolean[][] sets; // Matriz de tamaño 10x10. La primera driección se refiere al número de set y la segunda a la carta en el set. True si la tienes, False si no.
-    private int[] valorSet; // Array con el valor del set i+1 (los sets empiezan en 1, el array en 0).
+    public boolean[][] sets; // Matriz de tamaño 10x10. La primera driección se refiere al número de set y la segunda a la carta en el set. True si la tienes, False si no.
+    public int[] valorSet; // Array con el valor del set i+1 (los sets empiezan en 1, el array en 0).
+
+    private int S;
 
     // Constructor que inicializa las variables que contienen y determinan el dominio propio del agente.
-    public Album(int sobreinicial) {
+    public Album(int sobreinicial,int S) {
         this.tengo = new ArrayList<>();
         this.lista_deseados = new ArrayList<>();
         this.lista_ofrezco = new ArrayList<>();
@@ -52,6 +54,8 @@ public class Album {
         }
 
         this.valorTotal = 0;
+
+        this.S = S;
 
         abrirSobreInicial(sobreinicial);
         actualizarValor();
@@ -249,6 +253,7 @@ public class Album {
     // Método que recibe un cromo que eliminar del álbum.
     public void quito(Cromo cromo){
         this.tengo.remove(cromo);
+        this.sets[cromo.getSet()-1][(cromo.getId() - (cromo.getSet() - 1) * 10) - 1] = false;
         actualizarValor();
         ordenarOfrecidos();
         ordenarDeseados();
@@ -258,6 +263,7 @@ public class Album {
     public void consigo(Cromo cromo){
         if(!this.tengo.contains(cromo)){
             this.tengo.add(cromo);
+            this.sets[cromo.getSet()-1][(cromo.getId() - (cromo.getSet() - 1) * 10) - 1] = true;
             actualizarValor();
             ordenarOfrecidos();
             ordenarDeseados();
@@ -274,39 +280,150 @@ public class Album {
                 '}';
     }
     public static void main(String[] args) {
-        Random random = new Random();
-        Album album = new Album(10);
-        System.out.println(album+"\n");
+//        Random random = new Random();
+//        Album album1 = new Album(10);
+//        Album album2 = new Album(10);
+//
+//
+//        Cromo cromo1 = album1.COLECCION.get(0);
+//        Cromo cromo2 = album1.COLECCION.get(1);
+//        Cromo cromo3 = album1.COLECCION.get(2);
+//        Cromo cromo4 = album1.COLECCION.get(3);
+//        Cromo cromo5 = album1.COLECCION.get(4);
+//        Cromo cromo6 = album1.COLECCION.get(5);
+//        Cromo cromo7 = album1.COLECCION.get(6);
+//        Cromo cromo8 = album1.COLECCION.get(7);
+//        Cromo cromo9 = album1.COLECCION.get(8);
+//        Cromo cromo10 = album1.COLECCION.get(9);
+//
+//        Cromo cromo15 = album1.COLECCION.get(14);
+//
+//       album1.consigo(cromo1);
+//       album1.consigo(cromo2);
+//       album1.consigo(cromo3);
+//       album1.consigo(cromo15);
+//
+//       System.out.println(album1.toString());
+//
+//       album1.evaluarIntercambio(cromo15, cromo10);
 
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        System.out.println("Quitar un cromo");
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        int indice_quito = random.nextInt(10);
-        System.out.println("Quitando cromo: "+ album.tengo.get(indice_quito));
-        Cromo cromo_quito = album.tengo.get(indice_quito);
-        album.quito(cromo_quito);
-        System.out.println(album+"\n");
+    }
 
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        System.out.println("Añadir un cromo");
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        int indice_añado = random.nextInt(100);
-        Cromo cromo_añado = COLECCION.get(indice_añado);
-        while(album.tengo.contains(cromo_añado)){
-            indice_añado = random.nextInt(100);
-            cromo_añado = COLECCION.get(indice_añado);
+
+    //////////////////////////////////
+
+    ///   PARTE DE INTELIGENCIA   //
+
+    ////////////////////////////////
+
+
+    // Recive dos objetos carta, suponemos que el intercambio es cambiar carta A por carta B.
+    // Devuelve un TRUE si se recomienda realizar el intercambio y false si no.
+    // Se calcula teniendo en cuenta la diferencia de valor en cada carta y la diferencia esperada de valor en los sets
+    public boolean evaluarIntercambio(Cromo cartaA, Cromo cartaB) {
+
+        // Paso 2: Calcular el cambio en el valor individual de las cartas
+        double diferencia_valor_cartas = cartaB.getValor() - cartaA.getValor();
+
+        // Paso 3: Identificar los sets afectados por el intercambio
+        ArrayList<Integer> setsAfectados = new ArrayList<Integer>();
+        setsAfectados.add(cartaA.getSet());
+        setsAfectados.add(cartaB.getSet());
+
+        // Paso 4: Calcular el cambio en el valor esperado por sets
+        double diferencia_valor_sets = 0.0;
+        for (int setId : setsAfectados) {
+            //System.out.println("Considerando " + setId);
+            // Situación antes del intercambio
+           // System.out.println("Probabilidad antes:");
+            double probAntes = calcularProbabilidadCompletarSet(this.sets, setId);
+           // System.out.println(probAntes);
+
+
+            boolean tieneCartaA = (cartaA.getSet() == setId);
+            boolean tieneCartaB = (cartaB.getSet() == setId);
+
+            // Situación después del intercambio
+            boolean[][] setDespues = new boolean[sets.length][];
+            for (int i = 0; i < sets.length; i++) {
+                setDespues[i] = sets[i].clone(); // Esto copia las filas de forma independiente
+            }
+
+
+            if (tieneCartaA) {
+                setDespues[setId - 1][(cartaA.getId() - (setId-1)*10) - 1] = false;
+            }
+            if (tieneCartaB) {
+                setDespues[setId -1][(cartaB.getId() - (setId-1)*10) - 1] = true;
+            }
+
+
+            // Calcular la probabilidad de completar el set antes y después
+
+            double probDespues = calcularProbabilidadCompletarSet(setDespues, setId);
+//            System.out.println("Probabilidad después:");
+//            System.out.println(probDespues);
+
+            // Calcular el cambio en el valor esperado del set
+            double deltaProb = probDespues - probAntes;
+            double valorAdicionalSet = valorSet[setId - 1];
+            double deltaValorEsperadoSet = deltaProb * valorAdicionalSet;
+
+//            System.out.println("Valor potencial set: ");
+//            System.out.println(deltaValorEsperadoSet);
+
+            diferencia_valor_sets += deltaValorEsperadoSet;
         }
-        System.out.println("Añadiendo cromo: "+cromo_añado);
-        album.consigo(cromo_añado);
-        System.out.println(album+"\n");
 
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        System.out.println("Añadir un cromo que ya tienes");
-        System.out.println("+---+---+---+---+---+---+---+---+---+");
-        indice_añado = random.nextInt(10);
-        cromo_añado = album.tengo.get(indice_añado);
-        System.out.println("Añadiendo cromo: "+cromo_añado);
-        album.consigo(cromo_añado);
-        System.out.println(album+"\n");
+        // Paso 5: Calcular el cambio total en el valor esperado del álbum
+        double diferencia_valor_total_album = diferencia_valor_cartas + diferencia_valor_sets;
+
+        // Paso 6: Decidir si aceptar el intercambi
+        double umbral = (1 - (S / 10.0)) * 5; // Por ejemplo 5 unidades de valor de margen
+        boolean aceptarIntercambio_optimo = diferencia_valor_total_album > 0;
+
+        //Paso 7: Introducimos la posibilidad de equivocarse
+        // Introducimos la probabilidad de error según la "inteligencia" S (1 a 100)
+        double p_error = 1.0 - (S / 100.0);
+
+        // Generamos un número aleatorio
+        double randomValue = Math.random(); // entre 0 y 1
+
+        boolean decisionFinal;
+        if (randomValue < p_error) {
+            // Toma la decisión contraria a la óptima
+            decisionFinal = !aceptarIntercambio_optimo;
+        } else {
+            // Sigue la decisión óptima
+            decisionFinal = aceptarIntercambio_optimo;
+        }
+
+
+        // Paso 8: Imprimir los resultados
+//        System.out.println("Cambio en el valor individual de las cartas: " + diferencia_valor_cartas);
+//        System.out.println("Cambio en el valor esperado por sets: " + diferencia_valor_sets);
+//        System.out.println("Incremento total en el valor del álbum: " + diferencia_valor_total_album);
+//        if (aceptarIntercambio_optimo) {
+//            System.out.println("Decisión: Se recomienda realizar el intercambio.");
+//        } else {
+//            System.out.println("Decisión: No se recomienda realizar el intercambio.");
+//        }
+
+        return   decisionFinal;
+    }
+
+
+    // Dado una estructura de set  boolean[][] set, y un setID, calcula la probabilidad de completar ese set.
+    private double calcularProbabilidadCompletarSet(boolean[][] set, int setId) {
+        double probabilidad = 1.0;
+        int index_start = (setId - 1)*10;
+        for (int i = 0; i < 10; i++) {
+            if (!set[setId - 1][i]) {
+                Cromo cromoFaltante = COLECCION.get(index_start + i);
+                probabilidad = probabilidad * cromoFaltante.getProbabilidad();
+            }
+        }
+
+        return probabilidad;
     }
 }

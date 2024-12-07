@@ -1,5 +1,6 @@
 package agente;
 
+import Cambiacromos.Cromo;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -18,6 +19,8 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Random;
+
 
 
 import java.net.DatagramPacket;
@@ -41,6 +44,8 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathFactory;
 
+import Cambiacromos.Album;
+
 public class Agent {
 
     // Atributos o propiedades de la clase
@@ -53,19 +58,35 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.199.83", "192.168.199.227", "192.168.199.212", "192.168.199.161"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.133"));
     //Monitor info
-    private final String monitorIP = "192.168.199.83";
+    private final String monitorIP = "192.168.1.133";
     private final int monitorPort = 4300;
 
     //Para parar el agente
     private final Object monitor_stop = new Object();
     private boolean pausado;
 
+    //Atributos funcion del agente
+    Random random = new Random();
+    private int S = random.nextInt(41) + 60;
+    private boolean G = false;
+    private Album album = new Album(30,S);
+    private double initial_album_value = album.valorTotal;
+
+    private double felicidad = 50;
+
+    //Subir cada vez que se realice un intercambio
+    private int trade_counter;
+
+    private double regularizacion_incremento_album = 0.05;
+    private double regularizacion_numero_intercambios = 0.05;
+
+
     // Constructor
     public Agent(String id) throws UnknownHostException {
         // Pillamos nuestra IP local
-        this.ip = "192.168.127.227";
+        this.ip = getLocalIpAddress();
 
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
@@ -208,7 +229,7 @@ public class Agent {
                 // Cierra la conexión una vez procesado el mensaje
                 incomingConnection.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                //e.printStackTrace();
                 break;
             }
         }
@@ -270,40 +291,39 @@ public class Agent {
         System.out.println("===========================");
     }
     
-
-    //Por ahora solo manda mensajes con formato XML o sin el 
+    // IMPORTANTE LEER PARA APLICAR EL PROTOCOLO
+    // CAMBIO IMPORTANTE, AHORA AQUI SE GESTIONARA LA LOGICA DE LOS INTERCAMBIOS
+    // CADA VEZ QUE SE REALICE UN INTERCAMBIO, LLAMAR A actualizarfelicidad() y a check g para que tenga sentido el sitema
+    // Puede decidir si realizar  o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
+    // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() {
         if(!pausado) {
-            try {
-                // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
-                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            this.trade_counter++;
+            actualizarfelicidad();
 
-                // Pedir al usuario la IP de destino
-                System.out.print("Enter target IP: ");
-                String targetIp = reader.readLine();
+            System.out.println(this.album);
 
-                // Pedir el puerto de destino
-                System.out.print("Enter target port: ");
-                int targetPort = Integer.parseInt(reader.readLine());
+            Cromo cromo1 = album.COLECCION.get(0);
+            Cromo cromo2 = album.COLECCION.get(1);
+            Cromo cromo3 = album.COLECCION.get(2);
+            Cromo cromo4 = album.COLECCION.get(3);
+            Cromo cromo5 = album.COLECCION.get(4);
+            Cromo cromo15 = album.COLECCION.get(14);
+            Cromo cromo10 = album.COLECCION.get(9);
 
-                System.out.print("Enter message type: ");
-                String messageType = reader.readLine();
 
-                long originTime = System.currentTimeMillis();
 
-                //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
+            album.consigo(cromo1);
+            album.consigo(cromo2);
+            album.consigo(cromo3);
+            album.consigo(cromo4);
+            album.consigo(cromo15);
 
-                String message = createXmlMessage("1", "2", messageType, 1, "UDP", id
-                        , ip, udpPort, serverPort, Long.toString(originTime), "1", targetIp,
-                        targetPort - 2, targetPort + 2, "1", "nada"
-                );
+            System.out.println(this.album);
+            System.out.println(this.felicidad);
 
-                // Llamar a sendMessage para enviar el mensaje
-                sendMessage(targetIp, targetPort, message);
-            } catch (Exception e) {
-                System.out.println("An error occurred while sending the message.");
-                e.printStackTrace();
-            }
+            System.out.println(this.album.evaluarIntercambio(cromo15,cromo10));
+
         }else{
             System.out.println("\nEl agente esta parado y por lo tanto la funcion del agente tambien.\n");
         }
@@ -368,7 +388,7 @@ public class Agent {
                 Thread.sleep(200);
 
             } catch (Exception e) {
-                e.printStackTrace();
+                //e.printStackTrace();
             }
         }
     }
@@ -570,10 +590,6 @@ public class Agent {
         }
     }
 
-
-    private void error(){
-        //Hacemos que el agente aborte y mostramos el error qeu se ha producido
-    }
 
     public void autodestruccion() {
         System.out.println("El agente se esta autodestruyendo...");
@@ -839,6 +855,31 @@ public class Agent {
         }
     }
 
+    ////////////////////////////////////
+
+    ///   PARTE DE FUNCION AGENTE   //
+
+    /////////////////////////////////
+
+
+    public void actualizarfelicidad() {
+        // Función elegida para suavizar el número de intercambios: raíz cuadrada
+        double valor = regularizacion_incremento_album * (this.album.valorTotal - initial_album_value) + regularizacion_numero_intercambios * Math.sqrt(this.trade_counter);
+        // Función logística para mantener felicidad entre 0 y 100, con 50 como punto base.
+        this.felicidad  = 100 / (1 + Math.exp(-valor));
+
+    }
+
+    public void check_g() {
+        if (this.felicidad < 35) {
+            this.G = true;
+        }else{
+            this.G = false;
+        }
+    }
+
+
+
     public static void main(String[] args) throws UnknownHostException {
         String agentID;
 
@@ -880,7 +921,7 @@ public class Agent {
                 } else if (command.equalsIgnoreCase("exit")) {
                     agent.autodestruccion();
                     break; // Salir del bucle tras autodestrucción
-                } else if (command.equalsIgnoreCase("send")) {
+                } else if (command.equalsIgnoreCase("funcionagente")) {
                     agent.funcionDelAgente();
                 } else if (command.equalsIgnoreCase("reproducete")){
                     agent.reproducirse();
@@ -894,7 +935,6 @@ public class Agent {
             e.printStackTrace();
         }
     }
-
 
 }   
 
