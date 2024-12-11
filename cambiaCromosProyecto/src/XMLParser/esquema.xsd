@@ -12,9 +12,7 @@
                   <xs:element type="tipo_de_protocolo" name="type_protocol"/> <!-- Identifica el protocolo asociado al mensaje (los tipos protocolos se indican en la descripcion del tipo)  -->
                   <xs:element type="xs:integer" name="protocol_step"/> <!-- Identifica el ordinal del paso en el protocolo asociado al mensaje  -->
                   <xs:element type="xs:string" name="comunication_protocol"/> <!-- Identifica si el mensaje debe transmitirse por TCP o UDP  -->
-
                   <xs:element type="header_origin_info" name="origin"/> <!-- Identifica la informacion referente al emisor del mensaje -->
-
                   <xs:element type="header_destination_info" name="destination"/> <!-- Identifica la informacion referente al receptor del mensaje -->
                 </xs:sequence>
               </xs:complexType>

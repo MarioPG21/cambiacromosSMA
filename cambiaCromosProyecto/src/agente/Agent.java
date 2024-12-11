@@ -690,13 +690,9 @@ public class Agent {
             Element communicationProtocolS = doc.createElement("comunication_protocol");
             communicationProtocolS.setTextContent(communicationProtocol);
             header.appendChild(communicationProtocolS);
-
-
-
             // Elemento origin
             Element origin = doc.createElement("origin");
             header.appendChild(origin);
-
             Element originID = doc.createElement("origin_id");
             originID.setTextContent(originId);
             origin.appendChild(originID);
@@ -712,11 +708,9 @@ public class Agent {
             Element originT = doc.createElement("origin_time");
             originT.setTextContent(originTime);
             origin.appendChild(originT);
-
             // Elemento destination
             Element destination = doc.createElement("destination");
             header.appendChild(destination);
-
             Element destinationID = doc.createElement("destination_id");
             destinationID.setTextContent(destinationId);
             destination.appendChild(destinationID);
@@ -732,32 +726,23 @@ public class Agent {
             Element destinationT = doc.createElement("destination_time");
             destinationT.setTextContent(destinationTime);
             destination.appendChild(destinationT);
-
-
             // Elemento body
             Element body = doc.createElement("body");
             rootElement.appendChild(body);
-
             Element bodyI = doc.createElement("body_info");
             bodyI.setTextContent(bodyInfo);
             body.appendChild(bodyI);
-
-
             //createElement(doc, String.valueOf(body), "body_info", bodyInfo);
-
             // Elemento common_content vacío
             Element commonContent = doc.createElement("common_content");
             rootElement.appendChild(commonContent);
-
             // Convierte el documento en una cadena XML
-
             StringWriter writer = new StringWriter();
             TransformerFactory transformerFactory = TransformerFactory.newInstance();
             Transformer transformer = transformerFactory.newTransformer();
             transformer.transform(new DOMSource(doc), new StreamResult(writer));
             String xmlString = writer.toString();
             return xmlString;
-
 
         } catch (Exception e) {
             e.printStackTrace();
