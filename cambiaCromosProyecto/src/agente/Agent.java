@@ -26,8 +26,6 @@ import java.util.Random;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 
-import java.util.Scanner;
-
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -293,13 +291,13 @@ public class Agent {
     
     // IMPORTANTE LEER PARA APLICAR EL PROTOCOLO
     // CAMBIO IMPORTANTE, AHORA AQUI SE GESTIONARA LA LOGICA DE LOS INTERCAMBIOS
-    // CADA VEZ QUE SE REALICE UN INTERCAMBIO, LLAMAR A actualizarfelicidad() y a check g para que tenga sentido el sitema
+    // CADA VEZ QUE SE REALICE UN INTERCAMBIO, LLAMAR A actualizarFelicidad() y a check g para que tenga sentido el sistema
     // Puede decidir si realizar  o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() {
         if(!pausado) {
             this.trade_counter++;
-            actualizarfelicidad();
+            actualizarFelicdad();
 
             System.out.println(this.album);
 
@@ -812,7 +810,7 @@ public class Agent {
             // Expresión XPath para obtener el elemento type_protocol
             XPathExpression expression = xpath.compile("/Message/header/origin/origin_id");
 
-            // Busca el nodo type_protocol en el XML
+            // Busca el nodo origin_id en el XML
             Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
 
             // Retorna el contenido de type_protocol, o null si no se encuentra
@@ -862,7 +860,7 @@ public class Agent {
     /////////////////////////////////
 
 
-    public void actualizarfelicidad() {
+    public void actualizarFelicdad() {
         // Función elegida para suavizar el número de intercambios: raíz cuadrada
         double valor = regularizacion_incremento_album * (this.album.valorTotal - initial_album_value) + regularizacion_numero_intercambios * Math.sqrt(this.trade_counter);
         // Función logística para mantener felicidad entre 0 y 100, con 50 como punto base.
@@ -877,8 +875,6 @@ public class Agent {
             this.G = false;
         }
     }
-
-
 
     public static void main(String[] args) throws UnknownHostException {
         String agentID;
