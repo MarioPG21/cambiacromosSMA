@@ -788,10 +788,20 @@ public class Agent {
             return;
         }
 
+        // CROMOS CON LOS QUE NEGOCIAMOS AHORA MISMO
+        Cromo doy = give.poll();
+        Cromo tomo = take.poll();
+
         // if(this.album.evaluarIntercambio(give.get(0), take.get(0))) {}
 
         // COMIENZA EL BUCLE LESS GO
         while(skibidi){
+
+            // Primero, miramos la mejor oferta que estamos haciendo para ver si nos vale la pena, si no cancelamos
+            if(!this.album.evaluarIntercambio(doy, tomo)){
+                this.terminarIntercambio(false, k, msgId, m.getComId());
+                return;
+            }
 
             // Obtenemos mensaje SOLO SI NO ES PRIMERA ITERACIÓN (ya viene pre-cargado)
             if(negotiationCounter != 0){
@@ -811,24 +821,56 @@ public class Agent {
                 prStep = m.getProtocolStep()+1;
             }
 
+            // Miramos si es decisión
+            if(m.getProtocol().equals("decision")){
+                // Si acepta
+                if(m.getDecision()){
+                    // Actualizar cosas del album
+                    this.album.consigo(tomo);
+                    this.album.quito(doy);
+                    this.trade_counter++;
+                }
+                tradeLock.lock();
+                this.busy.set(false);
+                this.negId = "";
+                tradeLock.unlock();
+                return;
+            }
+
+
             // Ahora miramos el paso del protocolo, si es el 2 el otro agente aún no conoce nuestras listas
             // ponemos G=false para meterle un tímido nerf, que si no puedes ir robando todas las cartas de una
             if(prStep == 2){
                 myMessage.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                this.sendMessage(k.getIpString(), k.getPort(), myMessage.toXML());
                 negotiationCounter++;
                 continue; // Pasamos a siguiente iteración del bucle
             }
 
+            // EN EL RESTO DE ITERACIONES, MIRAMOS LA OFERTA QUE NOS LLEGA
+            Cromo ofertaDar = this.album.COLECCION.get(m.getWanted().get(0)-1);
+            Cromo ofertaTomar = this.album.COLECCION.get(m.getOffered().get(0)-1);
+
+            // Evaluamos la oferta recibida, si nos gusta el intercambio la aceptamos.
+            if(this.album.evaluarIntercambio(ofertaDar, ofertaTomar)){
+                // Actualizar cosas del album
+                this.album.consigo(tomo);
+                this.album.quito(doy);
+                this.trade_counter++;
+                this.terminarIntercambio(true, k, msgId, m.getComId());
+                return;
+            }
+
             // TODO: ACABAR ESTA PARTE
-            //  Iteración par => ofrecer mejor, iteración impar => pedir peor
+            //  Iteración par => ofrecer mejor [doy = give.poll()], iteración impar => pedir peor [tomo = take.poll()]
             //  En el momento que te den valor negativo o alcances iteración máxima cancelas intercambio
 
         }
 
-        // TODO: METER ACTUALIZACIONES DE ALBUM POR AQUÍ
-
         /*
-        * TODO: NO PODREMOS IMPLEMENTAR INTERCAMBIO DE VARIAS CARTAS SIMULTANEAMENTE
+        * TODO: NO PODREMOS IMPLEMENTAR INTERCAMBIO DE VARIAS CARTAS SIMULTÁNEAMENTE CON NUESTRA IMPLEMENTACIÓN ACTUAL
+        *   (en verdad podríamos hacer un evaluate por cada par de cromos (doy, tomo) y tomar la clase mayoritaria)
+        *   (pero que pereza en verdad)
         *   SUGIERO LA SIGUIENTE IMPLEMENTACIÓN:
         *   1. CAMBIAR MÉTODO EVALUAR DE EVALUAR UN PAR DE CROMOS A EVALUAR EL CAMBIO DE VALOR RESULTANTE
         *       AL DAR O RECIBIR UN CROMO (LLAMAR PARA CADA CROMO OFRECIDO Y PEDIDO Y DECIDIDR EN BASE A CAMBIO VALOR FINAL)
@@ -864,11 +906,11 @@ public class Agent {
     public void terminarIntercambio(boolean d, AgentKey k, int mId, String cId) {
         Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
         m.addDecision(d);
-        if(d){
-            this.trade_counter++;
-        }else{
-            // Nada de nada, ni mucho ni poco
-        }
+        this.sendMessage(k.getIpString(), k.getPort(), m.toXML());
+        tradeLock.lock();
+        this.busy.set(false);
+        this.negId = "";
+        tradeLock.unlock();
     }
 
     public void actualizarFelicdad() {

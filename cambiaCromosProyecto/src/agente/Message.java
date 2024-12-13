@@ -472,7 +472,7 @@ public class Message {
         return numCards;
     }
 
-    public boolean isDecision() {
+    public boolean getDecision() {
         return decision;
     }
 
