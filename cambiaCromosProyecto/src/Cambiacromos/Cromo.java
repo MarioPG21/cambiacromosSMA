@@ -1,5 +1,7 @@
 package Cambiacromos;
 
+import java.util.Objects;
+
 public class Cromo {
     private int id; // Entre 1 y 100
     private int valor; // valor de una carta por su rareza
@@ -38,6 +40,19 @@ public class Cromo {
                 ", probabilidad=" + probabilidad +
                 ", set=" + set +
                 '}';*/
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Cromo cromo = (Cromo) o;
+        return id == cromo.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }
 

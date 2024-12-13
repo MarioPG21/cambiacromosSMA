@@ -7,8 +7,8 @@ public class AgentInfo {
     // Este atributo simboliza el número de búsquedas que pueden pasar sin respuesta hasta borrar un agente
     private int ttl;
 
-    public AgentInfo(String t){
-        this.id = t;
+    public AgentInfo(String i){
+        this.id = i;
         ttl = 2000;
     }
 
@@ -32,7 +32,6 @@ public class AgentInfo {
     }
 
     // Override toString method
-
     @Override
     public String toString() {
         return id;

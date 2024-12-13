@@ -43,17 +43,21 @@
                             </xs:complexType>
                         </xs:element>
 
-                        <!-- Booleano que indica si se va a robar los cromos -->
-                        <xs:element type="xs:boolean" name="steal"/>
-
                         <!-- Número de rupias, 0 es que ni pide ni ofrece -->
                         <!-- Un número positivo de rupias indica que las ofrece -->
                         <!-- Un número negativo de rupias indica que las pide -->
                         <xs:element name="rupees" type="xs:decimal"/>
 
+                        <!-- Booleano que indica si se va a robar los cromos -->
+                        <xs:element type="xs:boolean" name="steal"/>
+
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
+
+            <!-- Booleano que aparecerá cuando se quiera hacer una decisión para acabar un intercambio -->
+            <!-- TRUE: acepto última oferta, FALSE: cancelo intercambio -->
+            <xs:element name="decision" minOccurs="0" type="xs:boolean"/>
 
             <xs:element name="monitor_info" minOccurs="0">
                 <xs:complexType>
@@ -83,7 +87,7 @@
               <xs:enumeration value="hola"/>
               <xs:enumeration value="estoy"/>
               <xs:enumeration value="intercambio"/>
-              <xs:enumeration value="intercambio"/>
+              <xs:enumeration value="decision"/>
               <!-- Protocolos asociados al comportamiento especifico. Cambia cromos, etc..basico -->
           </xs:restriction>
       </xs:simpleType>
@@ -94,7 +98,7 @@
                 <xs:element type="xs:string" name="origin_ip"/> <!-- ip del agente emisor -->
                 <xs:element type="xs:integer" name="origin_port_UDP"/> <!-- el puerto del emmisor por el que se realiza la conexion, si se transmite por UDP -->
                 <xs:element type="xs:integer" name="origin_port_TCP"/> <!-- el puerto del emmisor por el que se realiza la conexion, si se transmite por TCP -->
-                <xs:element type="xs:long" name="origin_time"/> <!-- momento en el que se emite el mensaje, segun el reloj del emisor -->
+                <xs:element type="xs:string" name="origin_time"/> <!-- momento en el que se emite el mensaje, segun el reloj del emisor -->
             </xs:sequence>
        </xs:complexType>
 
@@ -104,7 +108,7 @@
             <xs:element type="xs:string" name="destination_ip"/> <!-- ip del agente receptor -->
             <xs:element type="xs:integer" name="destination_port_UDP"/> <!-- el puerto del receptor por el que se realiza la conexion, si se transmite por UDP -->
             <xs:element type="xs:integer" name="destination_port_TCP"/> <!-- el puerto del receptor por el que se realiza la conexion, si se transmite por TCP -->
-            <xs:element type="xs:long" name="destination_time"/> <!-- momento en el que se recibe el mensaje, segun el reloj del receptor -->
+            <xs:element type="xs:string" name="destination_time"/> <!-- momento en el que se recibe el mensaje, segun el reloj del receptor -->
         </xs:sequence>
       </xs:complexType>
 

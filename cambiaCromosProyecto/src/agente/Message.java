@@ -1,5 +1,6 @@
 package agente;
 
+import Cambiacromos.Cromo;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -25,38 +26,40 @@ public class Message {
     // INFORMACIÓN DEL HEADER
     private String protocol;    // Protocolo de mensaje
     private int protocolStep;   // Paso dentro del protocolo
-    private String comProtocol;    // Protocolo de comunicación (TCP/UDP)
+    private String comProtocol; // Protocolo de comunicación (TCP/UDP)
 
     // INFORMACIÓN DE ORIGEN
     private String originId;    // Id de origen del mensaje
     private String originIp;    // Ip de origen del mensaje
     private int originPortTCP;  // Puerto TCP de origen del mensaje
     private int originPortUDP;  // Puerto UDP de origen del mensaje
-    private long originTime;    // Tiempo de origen
+    private String originTime;  // Tiempo de origen
 
     // INFORMACIÓN DE DESTINO
-    private String destId;      // Id de destino del mensaje
-    private String destIp;      // Ip de destino del mensaje
-    private int destPortTCP;    // Puerto TCP de destino del mensaje
-    private int destPortUDP;    // Puerto UDP de destino del mensaje
-    private long destTime;      // Tiempo de destino
+    private final String destId;      // Id de destino del mensaje
+    private final String destIp;      // Ip de destino del mensaje
+    private final int destPortTCP;    // Puerto TCP de destino del mensaje
+    private final int destPortUDP;    // Puerto UDP de destino del mensaje
+    private String destTime;          // Tiempo de destino
 
     // INFORMACIÓN DE INTERCAMBIO
-    private ArrayList<Integer> wanted = new ArrayList();    // Lista de cromos pedidos
-    private ArrayList<Integer> offered = new ArrayList();   // Lista de cromos ofrecidos
-    private double rupees;  // Rupias (pos. es ofrecido, neg. es pedido)
+    private ArrayList<Integer> wanted = new ArrayList<>();    // Lista de cromos pedidos
+    private ArrayList<Integer> offered = new ArrayList<>();   // Lista de cromos ofrecidos
+    private float rupees;                                   // Rupias (pos. es ofrecido, neg. es pedido)
+    private boolean steal = false;                                  // Boolean que indica si el emisor le va a robar al otro
 
     // INFORMACIÓN PARA MONITOR
-    private int happiness;
-    private int completedSets;
-    private int numCards;
+    private int happiness = -1;     // Felicidad de agente emisor
+    private int completedSets = -1; // Número de sets completados
+    private int numCards = -1;      // Número de cartas en colección
 
-    private boolean isTrade = false;  // Bool que indica si añadimos bloque de intercambio al mensaje o no
-    private boolean isMonitor = false; // Bool que indica si contiene info para el monitor
+    // DECISIÓN
+    private boolean decision;   // Decisión a la que llega en caso de que el mensaje sea tipo "decision"
 
-    // INFORMACIÓN DE CUERPO DE MENSAJE
-    // TODO: hacer todo el tema del cuerpo del mensaje
-    private String bodyInfo;
+    // Boolean que nos dirá si hay error en el mensaje
+    private boolean error = false;
+
+
 
     // CONSTRUCTOR PARA LOS MENSAJES QUE NOS LLEGAN
     // Construye un objeto mensaje a partir del xml
@@ -86,39 +89,60 @@ public class Message {
         this.originIp = doc.getElementsByTagName("origin_ip").item(0).getTextContent();
         this.originPortTCP = Integer.parseInt(doc.getElementsByTagName("origin_port_TCP").item(0).getTextContent());
         this.originPortUDP = Integer.parseInt(doc.getElementsByTagName("origin_port_UDP").item(0).getTextContent());
-        this.originTime = Long.parseLong(doc.getElementsByTagName("origin_time").item(0).getTextContent());
+        this.originTime = doc.getElementsByTagName("origin_time").item(0).getTextContent();
 
         // Información de destino
         this.destId = doc.getElementsByTagName("destination_id").item(0).getTextContent();
         this.destIp = doc.getElementsByTagName("destination_ip").item(0).getTextContent();
         this.destPortTCP = Integer.parseInt(doc.getElementsByTagName("destination_port_TCP").item(0).getTextContent());
         this.destPortUDP = Integer.parseInt(doc.getElementsByTagName("destination_port_UDP").item(0).getTextContent());
-        this.destTime = Long.parseLong(doc.getElementsByTagName("destination_time").item(0).getTextContent());
+        this.destTime = doc.getElementsByTagName("destination_time").item(0).getTextContent();
 
-        // Miramos si hay trading_block
-        NodeList t = doc.getElementsByTagName("trading_block");
-        if(t.getLength() > 0){
+        // EN ESTE BLOQUE RECOGEMOS INFORMACIÓN ESPECÍFICA DE INTERCAMBIO O DECISIÓN
+        switch (this.protocol) {
+            case "intercambio" -> {
+                // Miramos si hay trading block
+                NodeList t = doc.getElementsByTagName("trading_block");
+                if (t.getLength() > 0) {
 
-            this.isTrade = true;
+                    // Recogemos cartas deseadas
+                    NodeList wanted_cards = doc.getElementsByTagName("wanted_card");
+                    for (int i = 0; i < wanted_cards.getLength(); i++) {
+                        this.wanted.add(Integer.parseInt(wanted_cards.item(i).getTextContent()));
+                    }
+                    // Recogemos cartas ofrecidas
+                    NodeList offered_cards = doc.getElementsByTagName("offered_card");
+                    for (int i = 0; i < wanted_cards.getLength(); i++) {
+                        this.wanted.add(Integer.parseInt(offered_cards.item(i).getTextContent()));
+                    }
 
-            // Recogemos cartas deseadas
-            NodeList wanted_cards = doc.getElementsByTagName("wanted_card");
-            for(int i = 0; i < wanted_cards.getLength(); i++){
-                this.wanted.add(Integer.parseInt(wanted_cards.item(i).getTextContent()));
+                    // Recogemos rupias
+                    this.rupees = Float.parseFloat(doc.getElementsByTagName("rupees").item(0).getTextContent());
+
+                    // Miramos si roba
+                    this.steal = Boolean.parseBoolean(doc.getElementsByTagName("steal").item(0).getTextContent());
+
+                    // Si no hay trading block, error
+                } else {
+                    this.error = true;
+                }
             }
-
-            // Recogemos cartas ofrecidas
-            NodeList offered_cards = doc.getElementsByTagName("offered_card");
-            for(int i = 0; i < wanted_cards.getLength(); i++){
-                this.wanted.add(Integer.parseInt(offered_cards.item(i).getTextContent()));
+            case "decision" -> {
+                // Miramos si hay decision_block
+                NodeList d = doc.getElementsByTagName("decision");
+                if (d.getLength() > 0) {
+                    // Obtenemos nuestra decisión
+                    this.decision = Boolean.parseBoolean(d.item(0).getTextContent());
+                } else {
+                    this.error = true;
+                }
             }
         }
+
 
         // Miramos si hay monitor_info
         NodeList m = doc.getElementsByTagName("monitor_info");
         if(m.getLength() > 0){
-
-            this.isMonitor = true;
 
             // Pillamos grado de felicidad
             this.happiness = Integer.parseInt(doc.getElementsByTagName("happiness").item(0).getTextContent());
@@ -135,9 +159,11 @@ public class Message {
 
     // CONSTRUCTOR PARA LOS MENSAJES QUE ENVIAMOS
     // Construye un objeto mensaje a partir de los parámetros que le pasamos
+    // IMPORTANTE
+    // ESTA ES LA PLANTILLA BÁSICA DE CREACIÓN DE MENSAJE, LUEGO EXISTEN MÉTODOS PARA HACERLO DE INTERCAMBIO O NO
     public Message(String comId, String msgId, String protocol, int protocolStep, String comProtocol,
-                   String originId, String originIp, int originPortTCP, int originPortUDP, long originTime,
-                   String destId, String destIp, int destPortTCP, int destPortUDP, long destTime){
+                   String originId, String originIp, int originPortTCP, int originPortUDP, String originTime,
+                   String destId, String destIp, int destPortTCP, int destPortUDP, String destTime){
 
         this.comId = comId; this.msgId = msgId;
         this.protocol = protocol; this.protocolStep = protocolStep; this.comProtocol = comProtocol;
@@ -147,6 +173,27 @@ public class Message {
 
         this.destId = destId; this.destIp = destIp;
         this.destPortTCP = destPortTCP; this.destPortUDP = destPortUDP; this.destTime = destTime;
+    }
+
+    // MÉTODOS QUE USAREMOS PARA AÑADIR AL MENSAJE LOS ELEMENTOS ESPECÍFICOS A UN PROTOCOLO
+
+    // INTERCAMBIO
+    public void addTrade(ArrayList<Cromo> w, ArrayList<Cromo>o, boolean g, float r){
+        ArrayList<Integer> wanted = new ArrayList<>();
+        ArrayList<Integer> offered = new ArrayList<>();
+        for(Cromo c: w){ wanted.add(c.getId()); }
+        for(Cromo c: o){ offered.add(c.getId()); }
+        this.wanted = wanted; this.offered = offered; this.steal = g; this.rupees = r;
+    }
+
+    // DECISION
+    public void addDecision(boolean d){
+        this.decision = d;
+    }
+
+    // MÉTODO PARA AÑADIR INFO PARA EL MONITOR
+    public void addInfoMonitor(int h, int c, int n){
+        this.happiness = h; this.completedSets = c; this.numCards = n;
     }
 
     public String toXML(){
@@ -183,7 +230,6 @@ public class Message {
             header.appendChild(communicationProtocolS);
 
 
-
             // Elemento origin
             Element origin = doc.createElement("origin");
             header.appendChild(origin);
@@ -201,7 +247,7 @@ public class Message {
             originPortp.setTextContent(Integer.toString(this.originPortTCP));
             origin.appendChild(originPortp);
             Element originT = doc.createElement("origin_time");
-            originT.setTextContent(Long.toString(this.originTime));
+            originT.setTextContent(this.originTime);
             origin.appendChild(originT);
 
             // Elemento destination
@@ -214,39 +260,89 @@ public class Message {
             Element destinationIP = doc.createElement("destination_ip");
             destinationIP.setTextContent(this.destIp);
             destination.appendChild(destinationIP);
-            Element destinationPort = doc.createElement("destination_port_UDP");
-            destinationPort.setTextContent(Integer.toString(this.destPortUDP));
-            destination.appendChild(destinationPort);
-            Element destinationPortp = doc.createElement("destination_port_TCP");
-            destinationPortp.setTextContent(Integer.toString(this.destPortTCP));
-            destination.appendChild(destinationPortp);
+            Element destinationPortUDP = doc.createElement("destination_port_UDP");
+            destinationPortUDP.setTextContent(Integer.toString(this.destPortUDP));
+            destination.appendChild(destinationPortUDP);
+            Element destinationPortTCP = doc.createElement("destination_port_TCP");
+            destinationPortTCP.setTextContent(Integer.toString(this.destPortTCP));
+            destination.appendChild(destinationPortTCP);
             Element destinationT = doc.createElement("destination_time");
-            destinationT.setTextContent(Long.toString(this.destTime));
+            destinationT.setTextContent(this.destTime);
             destination.appendChild(destinationT);
 
-            // Elemento body
-            Element body = doc.createElement("body");
-            rootElement.appendChild(body);
+            switch (this.protocol) {
+                case "intercambio" -> {
+                    // Si el protocolo es intercambio añade bloque Intercambio
+                    Element tradingBlock = doc.createElement("trading_block");
+                    rootElement.appendChild(tradingBlock);
 
-            Element bodyI = doc.createElement("body_info");
-            bodyI.setTextContent(bodyInfo);
-            body.appendChild(bodyI);
+                    // Creamos un elemento wanted_cards
+                    Element wantedCards = doc.createElement("wanted_cards");
+                    tradingBlock.appendChild(wantedCards);
 
+                    // Por cada cromo de nuestra lista de cromos deseados metemos un elemento wanted a wanted_cards
+                    for (int c : this.wanted) {
+                        Element wanted = doc.createElement("wanted");
+                        wanted.setTextContent(Integer.toString(c));
+                        wantedCards.appendChild(wanted);
+                    }
 
-            //createElement(doc, String.valueOf(body), "body_info", bodyInfo);
+                    // Creamos un elemento offered_cards
+                    Element offeredCards = doc.createElement("offered_cards");
+                    tradingBlock.appendChild(offeredCards);
 
-            // Elemento common_content vacío
-            Element commonContent = doc.createElement("common_content");
-            rootElement.appendChild(commonContent);
+                    // Por cada cromo de nuestra lista de cromos deseados metemos un elemento offered a offered_cards
+                    for (int c : this.offered) {
+                        Element offered = doc.createElement("offered");
+                        offered.setTextContent(Integer.toString(c));
+                        offeredCards.appendChild(offered);
+                    }
 
-            // Convierte el documento en una cadena XML
+                    // Creamos el elemento rupias
+                    Element rupees = doc.createElement("rupees");
+                    rupees.setTextContent(Float.toString(this.rupees));
+                    tradingBlock.appendChild(rupees);
+
+                    // Creamos el elemento steal
+                    Element steal = doc.createElement("steal");
+                    steal.setTextContent(Boolean.toString(this.steal));
+                    tradingBlock.appendChild(steal);
+                }
+                case "decision" -> {
+                    // Añade elemento decisión
+                    Element decision = doc.createElement("decision");
+                    decision.setTextContent(Boolean.toString(this.decision));
+                    rootElement.appendChild(decision);
+                }
+            }
+
+            // Si los parámetros para el monitor son distintos de -1, se crea también el bloque monitor_info
+            if(this.happiness > -1 && this.completedSets > -1 && this.numCards > -1){
+                Element monitorInfo = doc.createElement("monitor_info");
+                rootElement.appendChild(monitorInfo);
+
+                // Felicidad
+                Element happiness = doc.createElement("happiness");
+                happiness.setTextContent(Integer.toString(this.happiness));
+                monitorInfo.appendChild(happiness);
+
+                // Número de sets completados
+                Element completedSets = doc.createElement("completed_sets");
+                completedSets.setTextContent(Integer.toString(this.completedSets));
+                monitorInfo.appendChild(completedSets);
+
+                // Cromos en la colección
+                Element numCards = doc.createElement("num_cards");
+                numCards.setTextContent(Integer.toString(this.numCards));
+                monitorInfo.appendChild(numCards);
+            }
 
             StringWriter writer = new StringWriter();
             TransformerFactory transformerFactory = TransformerFactory.newInstance();
             Transformer transformer = transformerFactory.newTransformer();
             transformer.transform(new DOMSource(doc), new StreamResult(writer));
-            String xmlString = writer.toString();
-            return xmlString;
+
+            return writer.toString();
 
 
         } catch (Exception e) {
@@ -256,33 +352,139 @@ public class Message {
     }
 
     public String toString(){
-        String str = "IDENTIFICADORES\n" +
+        StringBuilder str = new StringBuilder("IDENTIFICADORES\n" +
                 "comunicación: " + comId + ", mensaje: " + msgId + "\n" +
                 "PROTOCOLOS\n" +
-                "tipo de protocolo: " + protocol + " paso " +  protocolStep + "protocolo de comunicación: " + comProtocol +
+                "tipo de protocolo: " + protocol + " paso " + protocolStep + "protocolo de comunicación: " + comProtocol +
                 "ORIGEN\n" +
                 "id: " + originId + ", ip: " + originIp + ", puertos (TCP, UDP): " + originPortTCP + originPortUDP +
                 "DESTINO\n" +
-                "id: " + destId + ", ip: " + destIp + ", puertos (TCP, UDP): " + destPortTCP + destPortUDP;
+                "id: " + destId + ", ip: " + destIp + ", puertos (TCP, UDP): " + destPortTCP + destPortUDP);
 
-        if (isTrade){
-            str += "\nCROMOS OFRECIDOS\n";
+        // Miramos si tiene información de intercambio y lo unimos
+        if (!wanted.isEmpty()){
+            str.append("\nCROMOS OFRECIDOS\n");
             for(int c: wanted){
-                str += c + ", ";
+                str.append(c).append(", ");
             }
 
-            str += "\nCROMOS PEDIDOS\n";
+            str.append("\nCROMOS PEDIDOS\n");
             for(int c: offered){
-                str += c + ", ";
+                str.append(c).append(", ");
             }
 
             if(rupees > 0){
-                str += "\nRUPIAS OFRECIDAS: " + rupees;
+                str.append("\nRUPIAS OFRECIDAS: ").append(rupees);
             }else{
-                str += "\nRUBIAS PEDIDAS: " + rupees;
+                str.append("\nRUPIAS PEDIDAS: ").append(rupees);
             }
+
+            if(steal)
+            str.append("\n").append(originId).append(" LE ROBA A ").append(destId).append("!!!");
         }
-        return str;
+
+        return str.toString();
     }
 
+    public String getComId() {
+        return comId;
+    }
+
+    public String getMsgId() {
+        return msgId;
+    }
+
+    public String getProtocol() {
+        return protocol;
+    }
+
+    public int getProtocolStep() {
+        return protocolStep;
+    }
+
+    public String getComProtocol() {
+        return comProtocol;
+    }
+
+    public String getOriginId() {
+        return originId;
+    }
+
+    public String getOriginIp() {
+        return originIp;
+    }
+
+    public int getOriginPortTCP() {
+        return originPortTCP;
+    }
+
+    public int getOriginPortUDP() {
+        return originPortUDP;
+    }
+
+    public String getOriginTime() { return originTime; }
+
+    public String getDestId() {
+        return destId;
+    }
+
+    public String getDestIp() {
+        return destIp;
+    }
+
+    public int getDestPortTCP() {
+        return destPortTCP;
+    }
+
+    public int getDestPortUDP() {
+        return destPortUDP;
+    }
+
+    public String getDestTime() {
+        return destTime;
+    }
+
+    public ArrayList<Integer> getWanted() {
+        return wanted;
+    }
+
+    public ArrayList<Integer> getOffered() {
+        return offered;
+    }
+
+    public float getRupees() {
+        return rupees;
+    }
+
+    public boolean isSteal() {
+        return steal;
+    }
+
+    public int getHappiness() {
+        return happiness;
+    }
+
+    public int getCompletedSets() {
+        return completedSets;
+    }
+
+    public int getNumCards() {
+        return numCards;
+    }
+
+    public boolean isDecision() {
+        return decision;
+    }
+
+    public boolean isError() {
+        return error;
+    }
+
+    public void setComId(String comId) {
+        this.comId = comId;
+    }
+
+    public void setOriginTime(String originTime) { this.originTime = originTime; }
+
+    public void setDestTime(String destTime) { this.destTime = destTime; }
 }
