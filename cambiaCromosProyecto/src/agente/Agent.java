@@ -55,9 +55,9 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.133"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("127.0.0.1"));
     //Monitor info
-    private final String monitorIP = "192.168.1.133";
+    private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
     private AgentKey monitor_key;
 
@@ -68,7 +68,7 @@ public class Agent {
     // Para controlar el intercambio
     private ReentrantLock tradeLock = new ReentrantLock();          // Candado para controlar los intercambios
     private Condition tradeCondition = tradeLock.newCondition();    // Condición por la que se esperará a nuevas ofertas
-    private AtomicBoolean busy;                                     // Bool que define si el agente está ocupado
+    private AtomicBoolean busy = new AtomicBoolean(false);                                     // Bool que define si el agente está ocupado
     // Cola que se usará para esperar otro mensaje durante la negociación
     LinkedBlockingQueue<Message> queue = new LinkedBlockingQueue<>();
     private String negId = "";                                      // Id del agente con el que se está negociando
@@ -122,14 +122,14 @@ public class Agent {
     // Método para obtener la IP local
     private String getLocalIpAddress() {
         // NOTA: VA COMO UN TIRO PERO PARA LAS PRUEBAS VAMOS A HACERLO CON LA IP LOCAL POR DEFECTO
-        try {
+        /*try {
             InetAddress localHost = InetAddress.getLocalHost();
             return localHost.getHostAddress();
          } catch (UnknownHostException e) {
             e.printStackTrace();
             return "127.0.0.1"; // IP por defecto en caso de error
-        }
-        //return "127.0.0.1";
+        }*/
+        return "127.0.0.1";
     }
 
     // Método para encontrar puertos disponibles y asignarlos
@@ -211,11 +211,11 @@ public class Agent {
                 Socket incomingConnection = serverSocket.accept();
                 BufferedReader in = new BufferedReader(new InputStreamReader(incomingConnection.getInputStream()));
                 String receivedMessage = in.readLine();
-                System.out.println(receivedMessage);
+                // System.out.println(receivedMessage);
 
                 // Validar el mensaje XML
                 if (validate(receivedMessage)) {
-                    System.out.println("Received valid message:\n" + receivedMessage);
+                    // System.out.println("Received valid message:\n" + receivedMessage);
                     Message m = new Message(receivedMessage);
 
                     //Mostramos el tipo de mensaje para que se gestione correctamente
@@ -293,6 +293,7 @@ public class Agent {
     // Puede decidir si realizar o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() throws InterruptedException {
+        Thread.sleep(10000);
         // Se ejecuta siempre
         while(true) {
             // Mientras que no esté pausado
@@ -300,10 +301,13 @@ public class Agent {
                 // Le envía una petición de mensaje de intercambio a cada uno de los agentes que hay en su lista
                 for(AgentKey k : this.discoveredAgents.keySet()){
 
+                    Thread.sleep(2000);
+
                     // Creamos mensaje y le pasamos nuestra información de intercambio
                     // (deseados, ofrecidos, G, rupias)
                     Message m = createMessage(null, "1", "intercambio", 1, "TCP", k);
-                    m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, this.G, 0);
+                    m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                    ;
                     sendMessage(k.getIpString(), k.getPort(), m.toXML());
 
                     // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
@@ -313,6 +317,31 @@ public class Agent {
                 }
             }
         }
+    }
+
+    public void sendMessage() throws IOException {
+        // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        // Pedir al usuario la IP de destino
+        System.out.print("Enter target IP: ");
+        String targetIp = reader.readLine();
+
+        // Pedir el puerto de destino
+        System.out.print("Enter target port: ");
+        int targetPort = Integer.parseInt(reader.readLine());
+
+        System.out.print("Enter message type: ");
+        String messageType = reader.readLine();
+
+        long originTime = System.currentTimeMillis();
+
+        Message m = createMessage(null, "1", "messageType", 1, "TCP", new AgentKey(targetIp, targetPort));
+
+        // System.out.println(m.toString());
+
+        // Llamar a sendMessage para enviar el mensaje
+        sendMessage(targetIp, targetPort, m.toXML());
     }
         /*if(!pausado) {
 
@@ -658,13 +687,13 @@ public class Agent {
         LocalTime time = LocalTime.now();
         String destId;
         // COMO EL MONITOR NO LO TENEMOS REGISTRADO EN AGENTES DESCUBIERTOS, DEBEMOS TRATARLO APARTE
-        if(k == this.monitor_key){
+        if(k.equals(this.monitor_key)){
             destId = "MONITOR";
-        // TAMBIÉN MIRAMOS SI EL PROTOCOLO ES UDP, EN CUYO CASO MARCAMOS LA ID COMO DESCONOCIDA
-        }else if (comProtocol.equalsIgnoreCase("UDP")){
-            destId = "???";
-        // DE NORMAL SE USA EL ID DEL AGENTE QUE TENEMOS ALMACENADO EN NUESTRA LISTA
-        }else{ destId = this.discoveredAgents.get(k).getId(); }
+        // SI TENEMOS LA LLAVE EN NUESTRA LISTA
+        }else if (this.discoveredAgents.containsKey(k)){
+            destId = this.discoveredAgents.get(k).getId();
+        // SKIBIDI GYAT
+        } else{ destId = "Skibidi Gyat"; }
 
         String cId;
         if(comId == null){
@@ -727,7 +756,7 @@ public class Agent {
         /*
          * EXPLICACIÓN DE LA LÓGICA
          * AL PRINCIPIO LOS AGENTES SE GUARDAN TODAS LAS CARTAS QUE OFRECE Y QUIERE EL OTRO (PASAN LA LISTA ENTERA)
-         * CADA ITERACIÓN SE MIRA:
+         * LA PRIMERA ITERACIÓN SE MIRA:
          *   1. INTERSECCIÓN CROMOS QUE QUIERES CON CROMOS QUE OFRECE EL OTRO
          *   2. INTERSECCIÓN CROMOS QUE OFRECES CON CROMOS QUE QUIERE EL OTRO
          * SI ALGUNA DE ESAS DOS COSAS NO TIENE ELEMENTOS NO HAY INTERESES COMUNES Y SE CANCELA EL INTERCAMBIO
@@ -761,7 +790,11 @@ public class Agent {
         }
 
         // Info de comunicación
-        AgentKey k = new AgentKey(m.getOriginId(), m.getOriginPortTCP());
+        System.out.println("EL OTRO PRINGAO ES ESTE PAVO");
+        System.out.println(m.getOriginIp());
+        System.out.println(m.getOriginPortTCP());
+        AgentKey k = new AgentKey(m.getOriginIp(), m.getOriginPortTCP());
+        System.out.println(this.discoveredAgents.containsKey(k));
         int msgId = Integer.parseInt(m.getMsgId())+1;
         int prStep = m.getProtocolStep()+1;
 
@@ -781,6 +814,11 @@ public class Agent {
         for(Cromo mW : this.album.lista_deseados){ if(negOffered.contains(mW)) { take.add(mW); } }
         // Menor a mayor
         for(Cromo mO : this.album.lista_ofrezco){ if(negWanted.contains(mO)) { give.add(mO); } }
+
+        System.out.println("MI MENSAJE");
+        System.out.println(myMessage.toString());
+        System.out.println("OTRO MENSAJE");
+        System.out.println(m.toString());
 
         // Si alguna de las intersecciones está vacía, se rechaza el intercambio
         if(give.size() == 0 || take.size() == 0){
@@ -808,6 +846,11 @@ public class Agent {
 
             // Obtenemos mensaje SOLO SI NO ES PRIMERA ITERACIÓN (ya viene pre-cargado)
             if(negotiationCounter != 0){
+                System.out.println("MI MENSAJE");
+                System.out.println(myMessage.toString());
+                System.out.println("OTRO MENSAJE");
+                System.out.println(m.toString());
+
                 m = this.queue.poll(20, TimeUnit.SECONDS);
 
                 // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
@@ -898,9 +941,8 @@ public class Agent {
                 return;
             }
 
-            // TODO: poner número máximo de iteraciones
-
             negotiationCounter++;
+            Thread.sleep(2000);
 
         }
 
@@ -941,6 +983,15 @@ public class Agent {
     }
 
     public void terminarIntercambio(boolean d, AgentKey k, int mId, String cId) {
+        if(d){
+            System.out.println("******************************************************");
+            System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
+            System.out.println("******************************************************");
+        }else{
+            System.out.println("******************************************************");
+            System.out.println("*****************INTERCAMBIO DENEGADO*****************");
+            System.out.println("******************************************************");
+        }
         Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
         m.addDecision(d);
         this.sendMessage(k.getIpString(), k.getPort(), m.toXML());
@@ -966,7 +1017,7 @@ public class Agent {
         }
     }
 
-    public static void main(String[] args) throws UnknownHostException {
+    public static void main(String[] args) throws UnknownHostException, InterruptedException {
         String agentID;
 
         // Si tenemos un ID en args, el agente es hijo
@@ -990,6 +1041,8 @@ public class Agent {
             e.printStackTrace();
         }
 
+        agent.funcionDelAgente();
+
         // Leer comandos desde la consola
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
             String command;
@@ -1011,8 +1064,11 @@ public class Agent {
                     agent.funcionDelAgente();
                 } else if (command.equalsIgnoreCase("reproducete")){
                     agent.reproducirse();
-                }else if (command.equalsIgnoreCase("continua")){
-                    agent.continuar();}
+                } else if (command.equalsIgnoreCase("continua")){
+                    agent.continuar();
+                } else if (command.equalsIgnoreCase("send")){
+                    agent.sendMessage();
+                }
                 else {
                     System.out.println("Unknown command. Available commands: 'status', 'send', 'exit'");
                 }

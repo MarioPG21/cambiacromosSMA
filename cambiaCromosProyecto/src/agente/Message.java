@@ -113,7 +113,7 @@ public class Message {
                     // Recogemos cartas ofrecidas
                     NodeList offered_cards = doc.getElementsByTagName("offered_card");
                     for (int i = 0; i < wanted_cards.getLength(); i++) {
-                        this.wanted.add(Integer.parseInt(offered_cards.item(i).getTextContent()));
+                        this.offered.add(Integer.parseInt(offered_cards.item(i).getTextContent()));
                     }
 
                     // Recogemos rupias
@@ -282,7 +282,7 @@ public class Message {
 
                     // Por cada cromo de nuestra lista de cromos deseados metemos un elemento wanted a wanted_cards
                     for (int c : this.wanted) {
-                        Element wanted = doc.createElement("wanted");
+                        Element wanted = doc.createElement("wanted_card");
                         wanted.setTextContent(Integer.toString(c));
                         wantedCards.appendChild(wanted);
                     }
@@ -293,7 +293,7 @@ public class Message {
 
                     // Por cada cromo de nuestra lista de cromos deseados metemos un elemento offered a offered_cards
                     for (int c : this.offered) {
-                        Element offered = doc.createElement("offered");
+                        Element offered = doc.createElement("offered_card");
                         offered.setTextContent(Integer.toString(c));
                         offeredCards.appendChild(offered);
                     }
@@ -352,26 +352,21 @@ public class Message {
     }
 
     public String toString(){
-        StringBuilder str = new StringBuilder("IDENTIFICADORES\n" +
-                "comunicación: " + comId + ", mensaje: " + msgId + "\n" +
-                "PROTOCOLOS\n" +
-                "tipo de protocolo: " + protocol + " paso " + protocolStep + "protocolo de comunicación: " + comProtocol +
-                "ORIGEN\n" +
-                "id: " + originId + ", ip: " + originIp + ", puertos (TCP, UDP): " + originPortTCP + originPortUDP +
-                "DESTINO\n" +
-                "id: " + destId + ", ip: " + destIp + ", puertos (TCP, UDP): " + destPortTCP + destPortUDP);
+        StringBuilder str = new StringBuilder(
+                "COMUNICACIÓN: " + comId + ", mensaje: " + msgId +
+                "\nPROTOCOLO: " +  protocol + ", paso " + protocolStep + ", protocolo de com: " + comProtocol +
+                "\nORIGEN" +
+                "id: " + originId + ", ip: " + originIp + ", puertos: ("+originPortTCP+", "+originPortUDP+")"+
+                "\nDESTINO" +
+                "id: " + destId + ", ip: " + destIp + ", puertos (TCP, UDP): ("+destPortTCP+", "+destPortUDP+")");
 
         // Miramos si tiene información de intercambio y lo unimos
         if (!wanted.isEmpty()){
             str.append("\nCROMOS OFRECIDOS\n");
-            for(int c: wanted){
-                str.append(c).append(", ");
-            }
+            str.append(offered.toString());
 
             str.append("\nCROMOS PEDIDOS\n");
-            for(int c: offered){
-                str.append(c).append(", ");
-            }
+            str.append(wanted.toString());
 
             if(rupees > 0){
                 str.append("\nRUPIAS OFRECIDAS: ").append(rupees);
