@@ -1,48 +1,47 @@
 package agente;
 
-import Cambiacromos.Cromo;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.xml.sax.InputSource;
-
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
+
 import java.lang.management.ManagementFactory;
+
+import Cambiacromos.Cromo;
 import com.sun.management.OperatingSystemMXBean;
+
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Random;
-
-
-
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 
+import java.util.*;
+import java.util.Random;
+
+import java.time.LocalTime;
+
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ConcurrentHashMap;
+
 import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
+import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 import javax.xml.validation.Validator;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathFactory;
+
+import org.xml.sax.SAXException;
 
 import Cambiacromos.Album;
+
+
 
 public class Agent {
 
@@ -56,14 +55,23 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.1.133"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("127.0.0.1"));
     //Monitor info
-    private final String monitorIP = "192.168.1.133";
+    private final String monitorIP = "127.0.0.1";
     private final int monitorPort = 4300;
+    private AgentKey monitor_key;
 
     //Para parar el agente
     private final Object monitor_stop = new Object();
     private boolean pausado;
+
+    // Para controlar el intercambio
+    private ReentrantLock tradeLock = new ReentrantLock();          // Candado para controlar los intercambios
+    private Condition tradeCondition = tradeLock.newCondition();    // Condición por la que se esperará a nuevas ofertas
+    private AtomicBoolean busy = new AtomicBoolean(false);                                     // Bool que define si el agente está ocupado
+    // Cola que se usará para esperar otro mensaje durante la negociación
+    LinkedBlockingQueue<Message> queue = new LinkedBlockingQueue<>();
+    private String negId = "";                                      // Id del agente con el que se está negociando
 
     //Atributos funcion del agente
     Random random = new Random();
@@ -75,11 +83,11 @@ public class Agent {
     private double felicidad = 50;
 
     //Subir cada vez que se realice un intercambio
-    private int trade_counter;
+    // TODO: concretar funcionamiento de esto, ahora mismo está sólo con los intercambios exitosos
+    private int trade_counter = 0;
 
     private double regularizacion_incremento_album = 0.05;
     private double regularizacion_numero_intercambios = 0.05;
-
 
     // Constructor
     public Agent(String id) throws UnknownHostException {
@@ -89,7 +97,6 @@ public class Agent {
         //Encuentra puertos y los asigna automaticamente
         findPorts(); 
 
-        // TODO: Considerar cambiar a como lo dice el profesor (tipo A_2_1)
         // Pillamos un timestamp
         this.ts = System.currentTimeMillis();
         // El ID se recibe como parámetro
@@ -100,16 +107,13 @@ public class Agent {
         // Inicializamos el datagram socket
         initializeDatagramSocket();
 
+        this.monitor_key = new AgentKey(this.monitorIP, this.monitorPort);
+
         // Avisar al Monitor de que el agente ha nacido;
-        String message = createXmlMessage("1", "1","heNacido", 1, "TCP",
-                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
-                monitorPort+1, monitorPort, "1", "nada"
-        );
-        sendToMonitor(message);
+        Message message = createMessage(null, "1","heNacido", 1, "TCP", monitor_key);
+        sendToMonitor(message.toXML());
 
-
-        // Por ahora lanzamos los hilos independientes asi para poder hacerlo todo
-        // todo new Thread(this::listenForMessages).start();
+        // Por ahora lanzamos los hilos independientes asi para poder hacerlo
         new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
         new Thread(this::listenForUdpMessages).start();
@@ -117,16 +121,15 @@ public class Agent {
 
     // Método para obtener la IP local
     private String getLocalIpAddress() {
-        // TODO: OBTENER MASCAR SUBRED Y OBTENER LISTA DE IPS REQUISITOS 2 Y 3
         // NOTA: VA COMO UN TIRO PERO PARA LAS PRUEBAS VAMOS A HACERLO CON LA IP LOCAL POR DEFECTO
-        try {
+        /*try {
             InetAddress localHost = InetAddress.getLocalHost();
             return localHost.getHostAddress();
          } catch (UnknownHostException e) {
             e.printStackTrace();
             return "127.0.0.1"; // IP por defecto en caso de error
-        }
-        //return "127.0.0.1";
+        }*/
+        return "127.0.0.1";
     }
 
     // Método para encontrar puertos disponibles y asignarlos
@@ -146,7 +149,6 @@ public class Agent {
         }
     }
 
-
     // Comprueba si un puerto está disponible
     private boolean isPortAvailable(int port) {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
@@ -163,11 +165,11 @@ public class Agent {
             serverSocket = new ServerSocket(this.serverPort);
             System.out.println("Server socket initialized on port " + this.serverPort);
 
-
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
 
     public void initializeDatagramSocket() {
     try {
@@ -179,7 +181,6 @@ public class Agent {
         e.printStackTrace();
     }
 }
-
 
     // Método para enviar un mensaje a otro agente usando TCP
     public void sendMessage(String targetIp, int targetPort, String message) {
@@ -210,16 +211,17 @@ public class Agent {
                 Socket incomingConnection = serverSocket.accept();
                 BufferedReader in = new BufferedReader(new InputStreamReader(incomingConnection.getInputStream()));
                 String receivedMessage = in.readLine();
-                System.out.println(receivedMessage);
+                // System.out.println(receivedMessage);
 
                 // Validar el mensaje XML
                 if (validate(receivedMessage)) {
-                    System.out.println("Received valid message:\n" + receivedMessage);
+                    // System.out.println("Received valid message:\n" + receivedMessage);
+                    Message m = new Message(receivedMessage);
 
                     //Mostramos el tipo de mensaje para que se gestione correctamente
                     //System.out.println("Tipo de mensaje:" + getTypeProtocol(receivedMessage));
 
-                    this.interpretarTipoMensaje(getTypeProtocol(receivedMessage));
+                    this.interpretarTipoMensaje(m.getProtocol(), m.getOriginId(), m);
                 } else {
                     System.out.println("Mensaje descartado: No cumple con la estructura XML definida.");
                 }
@@ -229,6 +231,10 @@ public class Agent {
             } catch (IOException e) {
                 //e.printStackTrace();
                 break;
+            } catch (ParserConfigurationException e) {
+                e.printStackTrace();
+            } catch (SAXException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -256,20 +262,12 @@ public class Agent {
         }
     }
 
-
-    /* id creator
-    private int generateHash(String ip, int port, long timestamp) {
-        String combinedString = ip + ":" + port + ":" + timestamp;
-        return combinedString.hashCode() & 0x7FFFFFFF;
-    }
-    */
-
     // Método para obtener el ID
     public String getId() {
         return id;
     }
 
-    // Printea informacion principal sobre el agente
+    // Print información principal sobre el agente
     public void reporteEstado() {
         System.out.println("=== Agent Status Report ===");
         System.out.println("ID: " + this.id);
@@ -292,10 +290,62 @@ public class Agent {
     // IMPORTANTE LEER PARA APLICAR EL PROTOCOLO
     // CAMBIO IMPORTANTE, AHORA AQUI SE GESTIONARA LA LOGICA DE LOS INTERCAMBIOS
     // CADA VEZ QUE SE REALICE UN INTERCAMBIO, LLAMAR A actualizarFelicidad() y a check g para que tenga sentido el sistema
-    // Puede decidir si realizar  o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
+    // Puede decidir si realizar o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
-    public void funcionDelAgente() {
-        if(!pausado) {
+    public void funcionDelAgente() throws InterruptedException {
+        Thread.sleep(10000);
+        // Se ejecuta siempre
+        while(true) {
+            // Mientras que no esté pausado
+            if(!pausado){
+                // Le envía una petición de mensaje de intercambio a cada uno de los agentes que hay en su lista
+                for(AgentKey k : this.discoveredAgents.keySet()){
+
+                    Thread.sleep(2000);
+
+                    // Creamos mensaje y le pasamos nuestra información de intercambio
+                    // (deseados, ofrecidos, G, rupias)
+                    Message m = createMessage(null, "1", "intercambio", 1, "TCP", k);
+                    m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                    ;
+                    sendMessage(k.getIpString(), k.getPort(), m.toXML());
+
+                    // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
+                    // Negociamos y actualizamos felicidad y g
+                    if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();}
+
+                }
+            }
+        }
+    }
+
+    public void sendMessage() throws IOException {
+        // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        // Pedir al usuario la IP de destino
+        System.out.print("Enter target IP: ");
+        String targetIp = reader.readLine();
+
+        // Pedir el puerto de destino
+        System.out.print("Enter target port: ");
+        int targetPort = Integer.parseInt(reader.readLine());
+
+        System.out.print("Enter message type: ");
+        String messageType = reader.readLine();
+
+        long originTime = System.currentTimeMillis();
+
+        Message m = createMessage(null, "1", "messageType", 1, "TCP", new AgentKey(targetIp, targetPort));
+
+        // System.out.println(m.toString());
+
+        // Llamar a sendMessage para enviar el mensaje
+        sendMessage(targetIp, targetPort, m.toXML());
+    }
+        /*if(!pausado) {
+
+
             this.trade_counter++;
             actualizarFelicdad();
 
@@ -308,8 +358,6 @@ public class Agent {
             Cromo cromo5 = album.COLECCION.get(4);
             Cromo cromo15 = album.COLECCION.get(14);
             Cromo cromo10 = album.COLECCION.get(9);
-
-
 
             album.consigo(cromo1);
             album.consigo(cromo2);
@@ -325,7 +373,7 @@ public class Agent {
         }else{
             System.out.println("\nEl agente esta parado y por lo tanto la funcion del agente tambien.\n");
         }
-    }
+    }*/
 
     
     //Descubre agentes por fuerza bruta
@@ -356,19 +404,11 @@ public class Agent {
                                 }
                             }
 
-                        /*
-                        destID se obtendría así, pero no creo que tenga sentido añadirlo al mensaje de descubrimiento,
-                        ya que no hay manera de saberlo antes de que el agente que has descubierto te lo diga.
+                            // Creamos mensaje de descubrimiento
+                            Message discoveryMessage = createMessage(null, "1", "hola", 1, "UDP", k);
+                            String xmlString = discoveryMessage.toXML();
 
-                        String destId = discoveredAgents.get(a).getId();
-                         */
-
-                            String discoveryMessage = createXmlMessage("1", "2", "hola", 1, "UDP", id
-                                    , ip, udpPort, serverPort, Long.toString(originTime), "1", address,
-                                    port, port + 2, "1", "nada"
-                            );
-
-                            byte[] messageData = discoveryMessage.getBytes(StandardCharsets.UTF_8);
+                            byte[] messageData = xmlString.getBytes(StandardCharsets.UTF_8);
 
                                 // Crear un paquete UDP con el mensaje de descubrimiento
                                 DatagramPacket packet = new DatagramPacket(
@@ -394,7 +434,6 @@ public class Agent {
     //Método de escucha para mensajes de descubrimiento de agentes
     //Si es una request le responde con sus datos.
     //Si es una response lo registra
-    // TODO esto se puede optimizar mucho
     public void listenForUdpMessages() {
         byte[] buffer = new byte[1024];
     
@@ -412,11 +451,12 @@ public class Agent {
 
                 // Procesar el mensaje recibido
                 if(validate(message)) {
-                    String i = getSenderId(message);
-                    if(Objects.equals(getTypeProtocol(message), "hola")){
+                    Message m = new Message(message);
+                    String i = m.getOriginId();
+                    if(Objects.equals(m.getProtocol(), "hola")){
                         registerAgent(senderAddress,senderPort, i);
                         handleDiscoveryRequest(senderAddress, senderPort);
-                    }if(Objects.equals(getTypeProtocol(message), "estoy")){
+                    }if(Objects.equals(m.getProtocol(), "estoy")){
                         registerAgent(senderAddress,senderPort, i);
                     }
                 }else{
@@ -425,19 +465,19 @@ public class Agent {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+        } catch (SAXException e) {
+            e.printStackTrace();
         }
     }
 
     public void handleDiscoveryRequest(InetAddress requesterAddress, int requesterPort) {
         try {
-            long originTime = System.currentTimeMillis();
-
-            //TODO cambiar comID, msgID, destID ya que no tengo la lista de agentes
-
-            String responseMessage = createXmlMessage("1", "2", "estoy", 2, "UDP", id
-                    , ip, udpPort, serverPort,Long.toString(originTime) , "1",requesterAddress.getHostName() ,
-                    requesterPort, requesterPort+2, "1", "nada"
-            );
+            // Creamos un mensaje estoy
+            AgentKey k = new AgentKey(requesterAddress.getHostName(), requesterPort);
+            Message m = createMessage(null,"1", "estoy", 1, "UDP", k);
+            String responseMessage = m.toXML();
 
             byte[] responseData = responseMessage.getBytes(StandardCharsets.UTF_8);
     
@@ -452,37 +492,36 @@ public class Agent {
             e.printStackTrace();
         }
     }
-    
 
     public void registerAgent(InetAddress agentAddress, int serverPort, String i) {
         serverPort = serverPort - 1;
         String agentIp = agentAddress.getHostAddress();
         AgentKey k = new AgentKey(agentIp, serverPort);
-        // TODO: Sacar la ID del mensaje recibido
         AgentInfo v = new AgentInfo(i);
     
         if (!discoveredAgents.containsKey(k)) {
             discoveredAgents.put(k, v);
             //System.out.println("Registered new agent: " + agentInfo);
         } else {
-            // TODO: Cuando tenga la ID hacerlo así
             // La id no es la misma, es otro agente
-            // if(!discoveredAgents.get(k).getId().equals(senderId)){
-            //     AgentInfo other = new AgentInfo("otraId");
-            // }else{ *la línea de abajo
-            discoveredAgents.get(k).answered();
+            if(!discoveredAgents.get(k).getId().equals(i)){
+                AgentInfo other = new AgentInfo(i);
+            }else {
+                discoveredAgents.get(k).answered();
+            }
             //System.out.println("Agent already registered: " + agentInfo);
         }
     }
 
-
-    public void interpretarTipoMensaje(String tipo) {
+    public void interpretarTipoMensaje(String tipo, String id, Message m) {
         if (!this.pausado || tipo.equals("continua")) {
             switch (tipo) {
                 case "parate" -> this.parar();
                 case "continua" -> this.continuar();
                 case "autodestruyete" -> this.autodestruccion();
                 case "reproducete" -> this.reproducirse();
+                case "intercambio" -> this.intercambiar(id, m); // Llama a intercambiar
+                case "decision" -> this.intercambiar(id, m);    // Llama a intercambiar
                 default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
             }
         }else{
@@ -546,16 +585,12 @@ public class Agent {
         }
     }
 
-
     private void parar(){
         // Manda al monitor mensaje heParado
-        String message = createXmlMessage("1", "1","parado", 1, "TCP",
-                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
-                monitorPort+1, monitorPort, "1", "nada"
-        );
-        sendToMonitor(message);
+        Message m = createMessage(null, "1", "parado", 1, "TCP", monitor_key);
+        sendToMonitor(m.toXML());
 
-        //con enfoque de variable global y continue en los metodos de escucha
+        // Con enfoque de variable global y continue en los métodos de escucha
         synchronized (monitor_stop) {
             pausado = true;
             System.out.println("\nAgente parado.\n");
@@ -571,12 +606,10 @@ public class Agent {
             System.out.println("\nEl agente va a continuar.\n");
         }
 
-        String message = createXmlMessage("1", "1","continua", 1, "TCP",
-                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
-                monitorPort+1, monitorPort, "1", "nada"
-        );
-        sendToMonitor(message);
+        Message m = createMessage(null, "1", "continua", 1, "TCP", monitor_key);
+        sendToMonitor(m.toXML());
     }
+
     private void candado(){
         try{
             synchronized (monitor_stop) {
@@ -587,7 +620,6 @@ public class Agent {
             e.printStackTrace();
         }
     }
-
 
     public void autodestruccion() {
         System.out.println("El agente se esta autodestruyendo...");
@@ -609,11 +641,8 @@ public class Agent {
         }
 
         // Avisar al Monitor de que el agente muere;
-        String message = createXmlMessage("1", "1","meMuero", 1, "TCP",
-                id, ip, udpPort, serverPort, Long.toString(ts) , "1", monitorIP ,
-                monitorPort+1, monitorPort, "1", "nada"
-        );
-        sendToMonitor(message);
+        Message message = createMessage(null, "1","meMuero", 1, "TCP", monitor_key);
+        sendToMonitor(message.toXML());
 
         // Esperamos un poco para que el mensaje se mande correctamente que si no puede dar problemas con la gestion del socket
         try {
@@ -627,8 +656,7 @@ public class Agent {
         System.exit(0); // Termina el programa
     }
 
-
-
+    // Método de validación
     public static boolean validate(String xmlContent) {
         String xsdFilePath = "cambiaCromosProyecto/src/XMLParser/esquema.xsd";  // Ruta al archivo XSD
 
@@ -653,169 +681,32 @@ public class Agent {
         }
     }
 
+    // Método para crear un mensaje de cero
+    public Message createMessage(String comId, String msgId, String protocol, int protocolStep, String comProtocol,
+                                        AgentKey k) {
+        LocalTime time = LocalTime.now();
+        String destId;
+        // COMO EL MONITOR NO LO TENEMOS REGISTRADO EN AGENTES DESCUBIERTOS, DEBEMOS TRATARLO APARTE
+        if(k.equals(this.monitor_key)){
+            destId = "MONITOR";
+        // SI TENEMOS LA LLAVE EN NUESTRA LISTA
+        }else if (this.discoveredAgents.containsKey(k)){
+            destId = this.discoveredAgents.get(k).getId();
+        // SKIBIDI GYAT
+        } else{ destId = "Skibidi Gyat"; }
 
+        String cId;
+        if(comId == null){
+            cId = this.ip+":"+this.id+" to "+k.getIpString()+":"+destId+" started "+time.toString();
+        }else { cId = comId; }
+        // EL IDENTIFICADOR DE COMUNICACIÓN SERÁ BASADO EN DIRECCIÓN IP + ID DE LOS DOS AGENTES INVOLUCRADOS + TIEMPO
 
-    public static String createXmlMessage(String comucID, String msgID, String typeProtocol, int protocolStep,
-                                          String communicationProtocol, String originId, String originIp, int originPortUDP,
-                                          int originPortTCP, String originTime, String destinationId, String destinationIp,
-                                          int destinationPortUDP, int destinationPortTCP, String destinationTime, String bodyInfo) {
         try {
-            // Configura el analizador de documentos
-            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
-
-            // Crea el documento XML
-            Document doc = docBuilder.newDocument();
-            Element rootElement = doc.createElement("Message");
-            rootElement.setAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
-            doc.appendChild(rootElement);
-            Element nodeComunc = doc.createElement("comunc_id");
-            nodeComunc.setTextContent(comucID);
-            rootElement.appendChild(nodeComunc);
-            Element nodeMesgID = doc.createElement("msg_id");
-            nodeMesgID.setTextContent(msgID);
-            rootElement.appendChild(nodeMesgID);
-
-            // Agrega los elementos al XML
-
-            // Elemento header
-            Element header = doc.createElement("header");
-            rootElement.appendChild(header);
-            Element typeP = doc.createElement("type_protocol");
-            typeP.setTextContent(typeProtocol);
-            header.appendChild(typeP);
-            Element protocols = doc.createElement("protocol_step");
-            protocols.setTextContent(Integer.toString(protocolStep));
-            header.appendChild(protocols);
-            Element communicationProtocolS = doc.createElement("comunication_protocol");
-            communicationProtocolS.setTextContent(communicationProtocol);
-            header.appendChild(communicationProtocolS);
-
-
-
-            // Elemento origin
-            Element origin = doc.createElement("origin");
-            header.appendChild(origin);
-
-            Element originID = doc.createElement("origin_id");
-            originID.setTextContent(originId);
-            origin.appendChild(originID);
-            Element originIP = doc.createElement("origin_ip");
-            originIP.setTextContent(originIp);
-            origin.appendChild(originIP);
-            Element originPort = doc.createElement("origin_port_UDP");
-            originPort.setTextContent(Integer.toString(originPortUDP));
-            origin.appendChild(originPort);
-            Element originPortp = doc.createElement("origin_port_TCP");
-            originPortp.setTextContent(Integer.toString(originPortTCP));
-            origin.appendChild(originPortp);
-            Element originT = doc.createElement("origin_time");
-            originT.setTextContent(originTime);
-            origin.appendChild(originT);
-
-            // Elemento destination
-            Element destination = doc.createElement("destination");
-            header.appendChild(destination);
-
-            Element destinationID = doc.createElement("destination_id");
-            destinationID.setTextContent(destinationId);
-            destination.appendChild(destinationID);
-            Element destinationIP = doc.createElement("destination_ip");
-            destinationIP.setTextContent(destinationIp);
-            destination.appendChild(destinationIP);
-            Element destinationPort = doc.createElement("destination_port_UDP");
-            destinationPort.setTextContent(Integer.toString(destinationPortUDP));
-            destination.appendChild(destinationPort);
-            Element destinationPortp = doc.createElement("destination_port_TCP");
-            destinationPortp.setTextContent(Integer.toString(destinationPortTCP));
-            destination.appendChild(destinationPortp);
-            Element destinationT = doc.createElement("destination_time");
-            destinationT.setTextContent(destinationTime);
-            destination.appendChild(destinationT);
-
-
-            // Elemento body
-            Element body = doc.createElement("body");
-            rootElement.appendChild(body);
-
-            Element bodyI = doc.createElement("body_info");
-            bodyI.setTextContent(bodyInfo);
-            body.appendChild(bodyI);
-
-
-            //createElement(doc, String.valueOf(body), "body_info", bodyInfo);
-
-            // Elemento common_content vacío
-            Element commonContent = doc.createElement("common_content");
-            rootElement.appendChild(commonContent);
-
-            // Convierte el documento en una cadena XML
-
-            StringWriter writer = new StringWriter();
-            TransformerFactory transformerFactory = TransformerFactory.newInstance();
-            Transformer transformer = transformerFactory.newTransformer();
-            transformer.transform(new DOMSource(doc), new StreamResult(writer));
-            String xmlString = writer.toString();
-            return xmlString;
-
-
+            Message m = new Message(cId, msgId, protocol, protocolStep, comProtocol,
+                        this.id, this.ip, this.serverPort, this.udpPort, time.toString(),
+                        destId, k.getIpString(), k.getPort(), k.getPort()+1, "N/A");
+            return m;
         } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static String getTypeProtocol(String xmlContent) {
-        try {
-            // Configura el analizador XML
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-
-            // Parsear el contenido XML desde la cadena en lugar de un archivo
-            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
-
-            // Crea un objeto XPath para realizar la búsqueda en el documento
-            XPathFactory xPathFactory = XPathFactory.newInstance();
-            XPath xpath = xPathFactory.newXPath();
-
-            // Expresión XPath para obtener el elemento type_protocol
-            XPathExpression expression = xpath.compile("/Message/header/type_protocol");
-
-            // Busca el nodo type_protocol en el XML
-            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
-
-            // Retorna el contenido de type_protocol, o null si no se encuentra
-            return (node != null) ? node.getTextContent() : null;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static String getSenderId(String xmlContent) {
-        try {
-            // Configura el analizador XML
-
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-
-            // Parsear el contenido XML desde la cadena en lugar de un archivo
-            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
-
-            // Crea un objeto XPath para realizar la búsqueda en el documento
-            XPathFactory xPathFactory = XPathFactory.newInstance();
-            XPath xpath = xPathFactory.newXPath();
-
-            // Expresión XPath para obtener el elemento type_protocol
-            XPathExpression expression = xpath.compile("/Message/header/origin/origin_id");
-
-            // Busca el nodo origin_id en el XML
-            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
-
-            // Retorna el contenido de type_protocol, o null si no se encuentra
-            return (node != null) ? node.getTextContent() : null;
-        }catch (Exception e){
             e.printStackTrace();
             return null;
         }
@@ -859,6 +750,256 @@ public class Agent {
 
     /////////////////////////////////
 
+    // Función para negociar con un agente
+    public void negociar() throws InterruptedException {
+
+        /*
+         * EXPLICACIÓN DE LA LÓGICA
+         * AL PRINCIPIO LOS AGENTES SE GUARDAN TODAS LAS CARTAS QUE OFRECE Y QUIERE EL OTRO (PASAN LA LISTA ENTERA)
+         * LA PRIMERA ITERACIÓN SE MIRA:
+         *   1. INTERSECCIÓN CROMOS QUE QUIERES CON CROMOS QUE OFRECE EL OTRO
+         *   2. INTERSECCIÓN CROMOS QUE OFRECES CON CROMOS QUE QUIERE EL OTRO
+         * SI ALGUNA DE ESAS DOS COSAS NO TIENE ELEMENTOS NO HAY INTERESES COMUNES Y SE CANCELA EL INTERCAMBIO
+         * LUEGO LA IDEA ES QUE CADA UNO DE LOS AGENTES PASE UNA CARTA QUE OFRECE Y OTRA QUE QUIERE, Y ASÍ SE VAN EVALUANDO
+         * CADA UNO VA CEDIENDO MÁS CADA ITERACIÓN (OFRECIENDO UNA MEJOR SI NUMERO PAR, PIDIENDO UNA PEOR SI ITERACIÓN ES IMPAR)
+         */
+
+
+        int negotiationCounter = 0;     // Contador de negociaciones
+        boolean skibidi = true;         // Booleano para saber cuando acabar la negociación;
+
+        // Lista de deseados del otro agente
+        ArrayList<Cromo> negWanted = new ArrayList<>();
+        // Lista de ofrecidos del otro agente
+        ArrayList<Cromo> negOffered = new ArrayList<>();
+
+        // Lista de orden ascendente, ya que nos interesa dar más las cartas con menos valor
+        LinkedList<Cromo> give = new LinkedList<>();
+        // Lista de orden descendente, nos interesa más llevarnos las cartas más valiosas
+        LinkedList<Cromo> take = new LinkedList<>();
+
+        Message m = this.queue.poll(20, TimeUnit.SECONDS);
+
+        // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
+        if(m == null){
+            tradeLock.lock();
+            this.busy.set(false);
+            this.negId = "";
+            tradeLock.unlock();
+            return;
+        }
+
+        // Info de comunicación
+        System.out.println("EL OTRO PRINGAO ES ESTE PAVO");
+        System.out.println(m.getOriginIp());
+        System.out.println(m.getOriginPortTCP());
+        AgentKey k = new AgentKey(m.getOriginIp(), m.getOriginPortTCP());
+        System.out.println(this.discoveredAgents.containsKey(k));
+        int msgId = Integer.parseInt(m.getMsgId())+1;
+        int prStep = m.getProtocolStep()+1;
+
+        // Plantilla de los mensajes que iremos mandando
+        Message myMessage = createMessage(m.getComId(), Integer.toString(msgId), "intercambio",
+                prStep, "TCP", k);
+
+        // Memorizamos listas de deseados y ofrecidos del otro agente
+        for(int i : m.getWanted()){ negWanted.add(this.album.COLECCION.get(i-1)); }
+        for(int i : m.getOffered()){ negOffered.add(this.album.COLECCION.get(i-1)); }
+
+        // Miramos intersecciones entre nuestros cromos deseados y los suyos ofrecidos
+        // Esto tiene un tímido O(n^2), pero no me da la vida pa cambiarlo a un hashmap con id pa reducirlo a O(n)
+
+        // Se supone que listas están ordenadas según el valor calculado, por lo que el resultado lo estará también
+        // Mayor a menor
+        for(Cromo mW : this.album.lista_deseados){ if(negOffered.contains(mW)) { take.add(mW); } }
+        // Menor a mayor
+        for(Cromo mO : this.album.lista_ofrezco){ if(negWanted.contains(mO)) { give.add(mO); } }
+
+        System.out.println("MI MENSAJE");
+        System.out.println(myMessage.toString());
+        System.out.println("OTRO MENSAJE");
+        System.out.println(m.toString());
+
+        // Si alguna de las intersecciones está vacía, se rechaza el intercambio
+        if(give.size() == 0 || take.size() == 0){
+            this.terminarIntercambio(false, k, msgId, m.getComId());
+            return;
+        }
+
+        // CROMOS CON LOS QUE NEGOCIAMOS AHORA MISMO
+        Cromo doy = give.poll();
+        Cromo tomo = take.poll();
+
+        Cromo current_doy = doy;
+        Cromo current_tomo = tomo;
+
+        // if(this.album.evaluarIntercambio(give.get(0), take.get(0))) {}
+
+        // COMIENZA EL BUCLE LESS GO
+        while(skibidi){
+
+            // Primero, miramos la mejor oferta que estamos haciendo para ver si nos vale la pena, si no cancelamos
+            if(!this.album.evaluarIntercambio(doy, tomo)){
+                this.terminarIntercambio(false, k, msgId, m.getComId());
+                return;
+            }
+
+            // Obtenemos mensaje SOLO SI NO ES PRIMERA ITERACIÓN (ya viene pre-cargado)
+            if(negotiationCounter != 0){
+                System.out.println("MI MENSAJE");
+                System.out.println(myMessage.toString());
+                System.out.println("OTRO MENSAJE");
+                System.out.println(m.toString());
+
+                m = this.queue.poll(20, TimeUnit.SECONDS);
+
+                // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
+                if(m == null){
+                    tradeLock.lock();
+                    this.busy.set(false);
+                    this.negId = "";
+                    tradeLock.unlock();
+                    return;
+                }
+
+                // Actualizamos msgId y prStep
+                msgId = Integer.parseInt(m.getMsgId())+1;
+                prStep = m.getProtocolStep()+1;
+            }
+
+            // Miramos si es decisión
+            if(m.getProtocol().equals("decision")){
+                // Si acepta
+                if(m.getDecision()){
+                    // Actualizar cosas del album
+                    this.album.consigo(tomo);
+                    this.album.quito(doy);
+                    this.trade_counter++;
+                }
+                tradeLock.lock();
+                this.busy.set(false);
+                this.negId = "";
+                tradeLock.unlock();
+                return;
+            }
+
+            // Ahora miramos el paso del protocolo, si es el 2 el otro agente aún no conoce nuestras listas
+            // ponemos G=false para meterle un tímido nerf, que si no puedes ir robando todas las cartas de una
+            if(prStep == 2){
+                myMessage.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                this.sendMessage(k.getIpString(), k.getPort(), myMessage.toXML());
+                negotiationCounter++;
+                continue; // Pasamos a siguiente iteración del bucle
+            }
+
+            // EN EL RESTO DE ITERACIONES, MIRAMOS LA OFERTA QUE NOS LLEGA
+            Cromo ofertaDar = this.album.COLECCION.get(m.getWanted().get(0)-1);
+            Cromo ofertaTomar = this.album.COLECCION.get(m.getOffered().get(0)-1);
+
+            // Evaluamos la oferta recibida, si nos gusta el intercambio la aceptamos.
+            if(this.album.evaluarIntercambio(ofertaDar, ofertaTomar)){
+                // Actualizar cosas del album
+                this.album.consigo(current_tomo);
+                this.album.quito(current_doy);
+                this.trade_counter++;
+                this.terminarIntercambio(true, k, msgId, m.getComId());
+                return;
+            }
+
+            // Actualizamos nuestra oferta vigente
+            if(doy != null){ current_doy = doy; }
+            if(tomo != null){ current_tomo = tomo; }
+
+            ArrayList<Cromo> dame = new ArrayList<>();
+            dame.add(tomo);
+
+            ArrayList<Cromo> toma = new ArrayList<>();
+            dame.add(doy);
+
+            // Enviamos nuestra nueva oferta
+            myMessage.addTrade(dame, toma, this.G, 0);
+
+
+            if(negotiationCounter % 2 == 0){
+                doy = give.poll();
+                if(doy == null){
+                    // Si no podemos mejorar oferta con el ofrecido, lo hacemos con el pedido
+                    tomo = take.poll();
+                }
+
+            }else{
+                tomo = take.poll();
+                if(tomo == null){
+                    // Si no podemos mejorar oferta con el pedido, lo hacemos con el ofrecido
+                    doy = give.poll();
+                }
+            }
+
+            // Si nos quedamos sin poder mejorar ofertas, cancelamos intercambio
+            if(doy == null && tomo == null){
+                this.terminarIntercambio(false, k, msgId, m.getComId());
+                return;
+            }
+
+            negotiationCounter++;
+            Thread.sleep(2000);
+
+        }
+
+        /*
+        * TODO: NO PODREMOS IMPLEMENTAR INTERCAMBIO DE VARIAS CARTAS SIMULTÁNEAMENTE CON NUESTRA IMPLEMENTACIÓN ACTUAL
+        *   (en verdad podríamos hacer un evaluate por cada par de cromos (doy, tomo) y tomar la clase mayoritaria)
+        *   (pero que pereza en verdad)
+        *   SUGIERO LA SIGUIENTE IMPLEMENTACIÓN:
+        *   1. CAMBIAR MÉTODO EVALUAR DE EVALUAR UN PAR DE CROMOS A EVALUAR EL CAMBIO DE VALOR RESULTANTE
+        *       AL DAR O RECIBIR UN CROMO (LLAMAR PARA CADA CROMO OFRECIDO Y PEDIDO Y DECIDIDR EN BASE A CAMBIO VALOR FINAL)
+        *   2. CON EL CAMBIO DE VALOR FINAL (+10 P.EJ.) YA DECIDIR
+        */
+
+    }
+
+    // Función para tratar los mensajes de intercambio que nos lleguen.
+    public void intercambiar(String id, Message m) {
+        tradeLock.lock();
+        try{
+
+            // Miramos si está ocupado, si no lo está empezamos un intercambio nuevo y lo marcamos como ocupado
+            if (!busy.get()){
+                busy.set(true);
+                negId = id;
+            }else{
+                // Si estamos ocupados y nos llega un mensaje del agente con el que estamos negociando, lo atendemos
+                if (id.equals(negId)){
+                    queue.put(m);   // Encolamos el mensaje de negociación
+                }else{
+                    // Si no es con el que estamos negociando, lo ignoramos
+                }
+            }
+
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+        finally{ tradeLock.unlock(); }
+    }
+
+    public void terminarIntercambio(boolean d, AgentKey k, int mId, String cId) {
+        if(d){
+            System.out.println("******************************************************");
+            System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
+            System.out.println("******************************************************");
+        }else{
+            System.out.println("******************************************************");
+            System.out.println("*****************INTERCAMBIO DENEGADO*****************");
+            System.out.println("******************************************************");
+        }
+        Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
+        m.addDecision(d);
+        this.sendMessage(k.getIpString(), k.getPort(), m.toXML());
+        tradeLock.lock();
+        this.busy.set(false);
+        this.negId = "";
+        tradeLock.unlock();
+    }
 
     public void actualizarFelicdad() {
         // Función elegida para suavizar el número de intercambios: raíz cuadrada
@@ -876,7 +1017,7 @@ public class Agent {
         }
     }
 
-    public static void main(String[] args) throws UnknownHostException {
+    public static void main(String[] args) throws UnknownHostException, InterruptedException {
         String agentID;
 
         // Si tenemos un ID en args, el agente es hijo
@@ -900,6 +1041,8 @@ public class Agent {
             e.printStackTrace();
         }
 
+        agent.funcionDelAgente();
+
         // Leer comandos desde la consola
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
             String command;
@@ -921,13 +1064,16 @@ public class Agent {
                     agent.funcionDelAgente();
                 } else if (command.equalsIgnoreCase("reproducete")){
                     agent.reproducirse();
-                }else if (command.equalsIgnoreCase("continua")){
-                    agent.continuar();}
+                } else if (command.equalsIgnoreCase("continua")){
+                    agent.continuar();
+                } else if (command.equalsIgnoreCase("send")){
+                    agent.sendMessage();
+                }
                 else {
                     System.out.println("Unknown command. Available commands: 'status', 'send', 'exit'");
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }

@@ -24,9 +24,9 @@ public class Album {
     // COLECCION es la lista de cromos completa.
     public static final List<Cromo> COLECCION = generarCromos();
 
-    public List<Cromo> tengo; // lista de cromos
-    public List<Cromo> lista_deseados; // lista de los 10 cromos que no forman parte de la colección y que nos aportarían un valor total mayor al actual.
-    public List<Cromo> lista_ofrezco; // lista de los 10 cromos que forman parte de la colección que menos valor total nos harían perder si faltasen.
+    public ArrayList<Cromo> tengo; // lista de cromos
+    public ArrayList<Cromo> lista_deseados; // lista de los 10 cromos que no forman parte de la colección y que nos aportarían un valor total mayor al actual.
+    public ArrayList<Cromo> lista_ofrezco; // lista de los 10 cromos que forman parte de la colección que menos valor total nos harían perder si faltasen.
 
     public double valorTotal; // valor de cada carta en la lista de cromos a demás del valor de los sets completados
 
@@ -159,6 +159,7 @@ public class Album {
         this.valorTotal = valor_aux;
     }
 
+    // TODO: ARREGLAR ESTE MÉTODO
     // Método que actualiza la lista_deseados del álbum. Debe llamarse cada vez que se modifique el álbum.
     private void ordenarDeseados(){
         List<Cromo> no_tengo = new ArrayList<>();
@@ -184,7 +185,7 @@ public class Album {
                 if(!this.sets[set-1][cr]) restantes++;
             }
 
-            // Para evitar dividir por 0. No debería darse el caso pero por si ocurriese etá gestionado.
+            // Para evitar dividir por 0. No debería darse el caso, pero por si ocurriese etá gestionado.
             if(restantes!=0) {
                 double orden = valorCromo + (valorAdicional/restantes);
                 lista_ordenada.add(new OrdenCromo(cromo,orden));
@@ -203,12 +204,14 @@ public class Album {
             }
         });
 
+        //
         for (int i = 0; i < 10; i++) {
             //System.out.println(lista_ordenada.get(i));
             this.lista_deseados.add(lista_ordenada.get(i).cromo);
         }
     }
 
+    // TODO: ARREGLAR ESTE MÉTODO
     // Método que actualiza la lista_ofrezco del álbum. Debe llamarse cada vez que se modifique el álbum.
     private void ordenarOfrecidos(){
         List<OrdenCromo> lista_ordenada = new ArrayList<>();
@@ -280,32 +283,44 @@ public class Album {
                 '}';
     }
     public static void main(String[] args) {
-//        Random random = new Random();
-//        Album album1 = new Album(10);
-//        Album album2 = new Album(10);
-//
-//
-//        Cromo cromo1 = album1.COLECCION.get(0);
-//        Cromo cromo2 = album1.COLECCION.get(1);
-//        Cromo cromo3 = album1.COLECCION.get(2);
-//        Cromo cromo4 = album1.COLECCION.get(3);
-//        Cromo cromo5 = album1.COLECCION.get(4);
-//        Cromo cromo6 = album1.COLECCION.get(5);
-//        Cromo cromo7 = album1.COLECCION.get(6);
-//        Cromo cromo8 = album1.COLECCION.get(7);
-//        Cromo cromo9 = album1.COLECCION.get(8);
-//        Cromo cromo10 = album1.COLECCION.get(9);
-//
-//        Cromo cromo15 = album1.COLECCION.get(14);
-//
-//       album1.consigo(cromo1);
-//       album1.consigo(cromo2);
-//       album1.consigo(cromo3);
-//       album1.consigo(cromo15);
-//
-//       System.out.println(album1.toString());
-//
-//       album1.evaluarIntercambio(cromo15, cromo10);
+        Random random = new Random();
+        Album album1 = new Album(10, 1);
+        Album album2 = new Album(10, 1);
+
+
+        Cromo cromo1 = album1.COLECCION.get(0);
+        Cromo cromo2 = album1.COLECCION.get(1);
+        Cromo cromo3 = album1.COLECCION.get(2);
+        Cromo cromo4 = album1.COLECCION.get(3);
+        Cromo cromo5 = album1.COLECCION.get(4);
+        Cromo cromo6 = album1.COLECCION.get(5);
+        Cromo cromo7 = album1.COLECCION.get(6);
+        Cromo cromo8 = album1.COLECCION.get(7);
+        Cromo cromo9 = album1.COLECCION.get(8);
+        Cromo cromo10 = album1.COLECCION.get(9);
+        Cromo cromo15 = album1.COLECCION.get(14);
+
+        album1.consigo(cromo1);
+        album1.consigo(cromo2);
+        album1.consigo(cromo3);
+        album1.consigo(cromo15);
+
+        album1.ordenarDeseados();
+        album1.ordenarDeseados();
+        album1.ordenarDeseados();
+        album1.ordenarOfrecidos();
+        album1.ordenarOfrecidos();
+        album1.ordenarOfrecidos();
+
+        System.out.println("DESEADOS: ");
+        System.out.println(album1.lista_deseados);
+
+        System.out.println("OFRECIDOS: ");
+        System.out.println(album1.lista_ofrezco);
+
+       System.out.println(album1.toString());
+
+       album1.evaluarIntercambio(cromo15, cromo10);
 
     }
 
@@ -317,7 +332,7 @@ public class Album {
     ////////////////////////////////
 
 
-    // Recive dos objetos carta, suponemos que el intercambio es cambiar carta A por carta B.
+    // Recibe dos objetos carta, suponemos que el intercambio es cambiar carta A por carta B.
     // Devuelve un TRUE si se recomienda realizar el intercambio y false si no.
     // Se calcula teniendo en cuenta la diferencia de valor en cada carta y la diferencia esperada de valor en los sets
     public boolean evaluarIntercambio(Cromo cartaA, Cromo cartaB) {
