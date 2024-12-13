@@ -792,6 +792,9 @@ public class Agent {
         Cromo doy = give.poll();
         Cromo tomo = take.poll();
 
+        Cromo current_doy = doy;
+        Cromo current_tomo = tomo;
+
         // if(this.album.evaluarIntercambio(give.get(0), take.get(0))) {}
 
         // COMIENZA EL BUCLE LESS GO
@@ -837,7 +840,6 @@ public class Agent {
                 return;
             }
 
-
             // Ahora miramos el paso del protocolo, si es el 2 el otro agente aún no conoce nuestras listas
             // ponemos G=false para meterle un tímido nerf, que si no puedes ir robando todas las cartas de una
             if(prStep == 2){
@@ -854,16 +856,51 @@ public class Agent {
             // Evaluamos la oferta recibida, si nos gusta el intercambio la aceptamos.
             if(this.album.evaluarIntercambio(ofertaDar, ofertaTomar)){
                 // Actualizar cosas del album
-                this.album.consigo(tomo);
-                this.album.quito(doy);
+                this.album.consigo(current_tomo);
+                this.album.quito(current_doy);
                 this.trade_counter++;
                 this.terminarIntercambio(true, k, msgId, m.getComId());
                 return;
             }
 
-            // TODO: ACABAR ESTA PARTE
-            //  Iteración par => ofrecer mejor [doy = give.poll()], iteración impar => pedir peor [tomo = take.poll()]
-            //  En el momento que te den valor negativo o alcances iteración máxima cancelas intercambio
+            // Actualizamos nuestra oferta vigente
+            if(doy != null){ current_doy = doy; }
+            if(tomo != null){ current_tomo = tomo; }
+
+            ArrayList<Cromo> dame = new ArrayList<>();
+            dame.add(tomo);
+
+            ArrayList<Cromo> toma = new ArrayList<>();
+            dame.add(doy);
+
+            // Enviamos nuestra nueva oferta
+            myMessage.addTrade(dame, toma, this.G, 0);
+
+
+            if(negotiationCounter % 2 == 0){
+                doy = give.poll();
+                if(doy == null){
+                    // Si no podemos mejorar oferta con el ofrecido, lo hacemos con el pedido
+                    tomo = take.poll();
+                }
+
+            }else{
+                tomo = take.poll();
+                if(tomo == null){
+                    // Si no podemos mejorar oferta con el pedido, lo hacemos con el ofrecido
+                    doy = give.poll();
+                }
+            }
+
+            // Si nos quedamos sin poder mejorar ofertas, cancelamos intercambio
+            if(doy == null && tomo == null){
+                this.terminarIntercambio(false, k, msgId, m.getComId());
+                return;
+            }
+
+            // TODO: poner número máximo de iteraciones
+
+            negotiationCounter++;
 
         }
 
