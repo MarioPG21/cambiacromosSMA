@@ -19,6 +19,7 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.*;
 import javax.xml.XMLConstants;
 import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 public class Monitor {
 
@@ -27,32 +28,29 @@ public class Monitor {
     private static ConcurrentHashMap<AgentKey_Monitor, AgentInfo_Monitor> agents = new ConcurrentHashMap<>();
     private static JTable tabla;
     private static String[] columnas = {"Agente", "Número de cartas", "Sets Completados", "Felicidad", "Ladrón"};
-    private static Object[][] datos = {{"Total", 0, 0, 0},
-    };
+    private static Object[][] datos = {{"Total", 0, 0, 0},};
     private static DefaultTableModel modelo = new DefaultTableModel(datos, columnas);
     public static void main(String[] args) {
-        int port = 4300;
-
+        //Creamos el archivo xsd
         try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv"))) {
             writer.println("OriginID,DestinationID,TypeProtocol,ComunicationProtocol,ProtocolStep,origin_time"); // Encabezados del CSV
-
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        // Crear la JTable con el modelo
+        tabla = new JTable(modelo);
+        //Creamos la tabla
+        crearTabla();
         try {
-            // Crear la JTable con el modelo
-            tabla = new JTable(modelo);
-            //Creamos la tabla
-            crearTabla();
+            //Creamos el server socket
+            int port = 4300;
             ServerSocket serverSocket = new ServerSocket(port);
             System.out.println("Monitor está escuchando en el puerto " + port);
-
             while (true) {
+                //Crea un hilo para gestionar las peticiones del agente
                 Socket clientSocket = serverSocket.accept();
-
                 new Thread(new ClientHandler(clientSocket)).start();
             }
-
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -83,35 +81,7 @@ public class Monitor {
         }
     }
 
-    // Función para extraer el tipo de protocolo del contenido XML
-    public static String getTypeProtocol(String xmlContent) {
-        try {
-            // Configura el analizador XML
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-
-            // Parsear el contenido XML desde la cadena
-            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
-
-            // Crea un objeto XPath para realizar la búsqueda en el documento
-            XPathFactory xPathFactory = XPathFactory.newInstance();
-            XPath xpath = xPathFactory.newXPath();
-
-            // Expresión XPath para obtener el elemento type_protocol
-            XPathExpression expression = xpath.compile("/Message/header/type_protocol");
-
-            // Busca el nodo type_protocol en el XML
-            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
-
-            // Retorna el contenido de type_protocol, o null si no se encuentra
-            return (node != null) ? node.getTextContent() : null;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
+    //Función para crear la tabla con la información del sistema
     public static void crearTabla() {
 
         //Valores de la tabla
@@ -150,67 +120,41 @@ public class Monitor {
             actualizarTabla(); // Llamar al método de actualización
         });
 
-
-
-
         frame.add(scrollPane, BorderLayout.CENTER);
         frame.add(actualizarBtn, BorderLayout.SOUTH);
         // Mostrar el marco
         frame.setVisible(true);
     }
 
-    // Función para extraer el origin_id del contenido XML
-    public static String getOriginId(String xmlContent) {
-        try {
-            // Configura el analizador XML
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-
-            // Parsear el contenido XML desde la cadena
-            Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
-
-            // Crea un objeto XPath para realizar la búsqueda en el documento
-            XPathFactory xPathFactory = XPathFactory.newInstance();
-            XPath xpath = xPathFactory.newXPath();
-
-            // Expresión XPath para obtener el elemento origin_id
-            XPathExpression expression = xpath.compile("/Message/header/origin/origin_id");
-
-            // Busca el nodo origin_id en el XML
-            Node node = (Node) expression.evaluate(doc, XPathConstants.NODE);
-
-            // Retorna el contenido de origin_id, o null si no se encuentra
-            return (node != null) ? node.getTextContent() : null;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
     //Función para actualizar la información de la tabla
-    public static void ActualizarInfo(String xmlContent, String id) {
+    public static void ActualizarInfo(String xmlContent) {
         try {
-            // Configura el analizador XML
+            // Sacamos los atributos de la clase mensaje
             Message message = new Message(xmlContent);
+
+            String id = message.getOriginId();
             int felicidad = message.getHappiness();
             if (felicidad == -1) {
                 felicidad = 0;
             }
             int num_sets = message.getCompletedSets();
+
             if (num_sets == -1) {
                 num_sets = 0;
             }
             int num_cromos = message.getNumCards();
+
             if (num_cromos == -1) {
                 num_cromos = 0;
             }
             boolean ladron = message.isSteal();
+
             //Si el agente no está en el hashmap se añade, en cualquier caso se actualiza la tabla
             if (!agents.containsKey(id)) {
                 agents.put(new AgentKey_Monitor(id), new AgentInfo_Monitor(id,felicidad,num_sets,num_cromos,ladron));
                 actualizarTabla();
             } else {
+
                 actualizarTabla();
             }
 
@@ -222,15 +166,14 @@ public class Monitor {
 
     //Función para actualizar la propia tabla
     public static void actualizarTabla() {
-
+        //Eliminamos las filas de latabla
         modelo.setRowCount(0);
-        modelo.setRowCount(0);
+        //Ponemos a 0 los atributos generales
         int total_agentes = agents.size();
         int total_felicidades = 0;
         int total_sets = 0;
         int total_cromos = 0;
         ArrayList<Object[]> listaDatos = new ArrayList<>();
-
 
         //Recorremos el hashmap para obtener los atributos de los agentes
         for (Map.Entry<AgentKey_Monitor, AgentInfo_Monitor> entry : agents.entrySet()) {
@@ -274,20 +217,21 @@ public class Monitor {
 
     }
     //Generamos el XSD con todos los mensajes
-    public static void generarXsd(String xmlContent,String origin_id, String type) {
+    public static void generarXsd(String xmlContent) {
         try {
 
-
+            //Sacamos los atributos del mensaje
             Message message = new Message(xmlContent);
             String Dest_id = message.getDestId();
             String protocol = message.getProtocol();
             int protocol_step = message.getProtocolStep();
+            String origin_id = message.getOriginId();
+            String type = message.getProtocol();
             String time = message.getOriginTime();
-
+            //Los añadimos al  xsd
             try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv", true))) {
                 writer.println(origin_id + "," + Dest_id + "," + type + "," + protocol + "," + protocol_step + "," + time);
             }
-
         } catch (Exception e) {
         e.printStackTrace();
         }
@@ -317,11 +261,13 @@ public class Monitor {
 
                 // Validar el mensaje
                 if (Monitor.validate(xmlContent)) {
+
+                    Message message = new Message(xmlContent);
                     // Extraer el tipo de protocolo
-                    String type = Monitor.getTypeProtocol(xmlContent);
+                    String type = message.getProtocol();
 
                     // Extraer el origin_id
-                    String originId = Monitor.getOriginId(xmlContent);
+                    String originId = message.getOriginId();
 
                     // Si no se pudo obtener el originId, usar la dirección IP del cliente
                     if (originId == null || originId.isEmpty()) {
@@ -333,25 +279,34 @@ public class Monitor {
                         case "heNacido":
                             System.out.println("El agente " + originId + " acaba de nacer en " + clientSocket.getInetAddress().getHostAddress());
                             System.out.println("a:" + xmlContent);
-                            ActualizarInfo(xmlContent,  originId);
-                            generarXsd(xmlContent,originId,type);
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
                             break;
                         case "parado":
                             System.out.println("El agente " + originId + " se va a parar en " + clientSocket.getInetAddress().getHostAddress());
-                            ActualizarInfo(xmlContent, originId);
-                            generarXsd(xmlContent,originId,type);
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
                             break;
                         case "continua":
                             System.out.println("El agente " + originId + " va a continuar en " + clientSocket.getInetAddress().getHostAddress());
-                            ActualizarInfo(xmlContent,  originId);
-                            generarXsd(xmlContent,originId,type);
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
                             break;
                         case "meMuero":
                             System.out.println("El agente " + originId + " se va a morir en " + clientSocket.getInetAddress().getHostAddress());
                             agents.remove((new AgentKey_Monitor(originId)));
                             actualizarTabla();
-                            generarXsd(xmlContent,originId,type);
+                            generarXsd(xmlContent);
                             break;
+                        case "intercambio":
+                            System.out.println("El agente " + originId + "intenta intercambiar en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                            break;
+                        case "decision":
+                            System.out.println("El agente " + originId + "toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
                         default:
                             System.out.println("Tipo de mensaje desconocido de " + originId + ": " + type);
                             break;
@@ -361,12 +316,16 @@ public class Monitor {
                     System.out.println("Mensaje inválido recibido de " + clientSocket.getInetAddress().getHostAddress());
                 }
 
-                        // Cerrar recursos
+                // Cerrar recursos
                 in.close();
                 clientSocket.close();
 
             } catch (IOException e) {
                 e.printStackTrace();
+            } catch (ParserConfigurationException e) {
+                throw new RuntimeException(e);
+            } catch (SAXException e) {
+                throw new RuntimeException(e);
             }
         }
     }

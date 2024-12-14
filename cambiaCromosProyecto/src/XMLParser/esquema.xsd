@@ -62,9 +62,9 @@
             <xs:element name="monitor_info" minOccurs="0">
                 <xs:complexType>
                     <xs:sequence>
-                        <xs:element name="happiness" type="xs:positiveInteger"/>
-                        <xs:element name="completed_sets" type="xs:positiveInteger"/>
-                        <xs:element name="num_cards" type="xs:positiveInteger"/>
+                        <xs:element name="happiness" type="xs:integer"/>
+                        <xs:element name="completed_sets" type="xs:integer"/>
+                        <xs:element name="num_cards" type="xs:integer"/>
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>

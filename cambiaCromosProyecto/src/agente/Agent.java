@@ -77,7 +77,7 @@ public class Agent {
     Random random = new Random();
     private int S = random.nextInt(41) + 60;
     private boolean G = false;
-    private Album album = new Album(30,S);
+    private Album album = new Album(70,S);
     private double initial_album_value = album.valorTotal;
 
     private double felicidad = 50;
@@ -111,8 +111,8 @@ public class Agent {
 
         // Avisar al Monitor de que el agente ha nacido;
         Message message = createMessage(null, "1","heNacido", 1, "TCP", monitor_key);
+        message.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
         sendToMonitor(message.toXML());
-
         // Por ahora lanzamos los hilos independientes asi para poder hacerlo
         new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
@@ -293,7 +293,7 @@ public class Agent {
     // Puede decidir si realizar o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() throws InterruptedException {
-        Thread.sleep(10000);
+        Thread.sleep(2000);
         // Se ejecuta siempre
         while(true) {
             // Mientras que no esté pausado
@@ -307,9 +307,9 @@ public class Agent {
                     // (deseados, ofrecidos, G, rupias)
                     Message m = createMessage(null, "1", "intercambio", 1, "TCP", k);
                     m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
-                    ;
+                    m.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
                     sendMessage(k.getIpString(), k.getPort(), m.toXML());
-
+                    sendToMonitor(m.toXML());
                     // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
                     // Negociamos y actualizamos felicidad y g
                     if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();}
@@ -887,7 +887,9 @@ public class Agent {
             // ponemos G=false para meterle un tímido nerf, que si no puedes ir robando todas las cartas de una
             if(prStep == 2){
                 myMessage.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                myMessage.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
                 this.sendMessage(k.getIpString(), k.getPort(), myMessage.toXML());
+                this.sendToMonitor(myMessage.toXML());
                 negotiationCounter++;
                 continue; // Pasamos a siguiente iteración del bucle
             }
@@ -994,7 +996,9 @@ public class Agent {
         }
         Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
         m.addDecision(d);
+        m.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
         this.sendMessage(k.getIpString(), k.getPort(), m.toXML());
+        this.sendToMonitor(m.toXML());
         tradeLock.lock();
         this.busy.set(false);
         this.negId = "";
@@ -1002,11 +1006,12 @@ public class Agent {
     }
 
     public void actualizarFelicdad() {
+
         // Función elegida para suavizar el número de intercambios: raíz cuadrada
         double valor = regularizacion_incremento_album * (this.album.valorTotal - initial_album_value) + regularizacion_numero_intercambios * Math.sqrt(this.trade_counter);
         // Función logística para mantener felicidad entre 0 y 100, con 50 como punto base.
         this.felicidad  = 100 / (1 + Math.exp(-valor));
-
+        System.out.println("Actualizando felicidad " + this.felicidad);
     }
 
     public void check_g() {
@@ -1053,7 +1058,6 @@ public class Agent {
                 // Leer el comando
                 command = reader.readLine();
                 if (command == null) break;
-
                 // Procesar el comando
                 if (command.equalsIgnoreCase("status")) {
                     agent.reporteEstado();

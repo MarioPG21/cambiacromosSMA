@@ -149,9 +149,8 @@ public class Message {
 
             // Pillamos numero de sets completados
             this.completedSets = Integer.parseInt(doc.getElementsByTagName("completed_sets").item(0).getTextContent());
-
             // Pillamos numero de cromos
-            this.numCards = Integer.parseInt(doc.getElementsByTagName("completed_sets").item(0).getTextContent());
+            this.numCards = Integer.parseInt(doc.getElementsByTagName("num_cards").item(0).getTextContent());
 
         }
 

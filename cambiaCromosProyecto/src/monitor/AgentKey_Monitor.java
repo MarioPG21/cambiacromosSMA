@@ -5,15 +5,14 @@ import java.util.Objects;
 public class AgentKey_Monitor {
 
     // Atributos que componen la llave
-    private final String ipString;
-
+    private final String idString;
 
     public AgentKey_Monitor(String s){
-        this.ipString = s;
+        this.idString = s;
     }
 
     // Getters
-    public String getIpString(){return this.ipString;}
+    public String getIpString(){return this.idString;}
 
 
     // Sobreescribir método equals
@@ -25,16 +24,16 @@ public class AgentKey_Monitor {
         // Casting a la clase AgentKey
         AgentKey_Monitor that = (AgentKey_Monitor) o;
         // Compara ip y puerto
-        return  this.ipString.equals(that.ipString);
+        return  this.idString.equals(that.idString);
     }
 
     // Cambiamos método hash para que se cree a partir de ip y puerto
     public int hashCode(){
-        return Objects.hash(ipString);
+        return Objects.hash(idString);
     }
 
     // Cambiamos método toString para que imprima la dupla (ip, puerto)
     public String toString(){
-        return "(" +ipString+ ")";
+        return "(" +idString+ ")";
     }
 }
