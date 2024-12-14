@@ -67,17 +67,20 @@ public class Agent {
 
     // Para controlar el intercambio
     private ReentrantLock tradeLock = new ReentrantLock();          // Candado para controlar los intercambios
-    private Condition tradeCondition = tradeLock.newCondition();    // Condición por la que se esperará a nuevas ofertas
-    private AtomicBoolean busy = new AtomicBoolean(false);                                     // Bool que define si el agente está ocupado
-    // Cola que se usará para esperar otro mensaje durante la negociación
-    LinkedBlockingQueue<Message> queue = new LinkedBlockingQueue<>();
-    private String negId = "";                                      // Id del agente con el que se está negociando
+    private AtomicBoolean busy = new AtomicBoolean(false); // Bool que define si el agente está ocupado
+    private AgentKey negotiationId = null;  // Id del agente con el que se está negociando
+
+    // VAMOS A DEFINIR DISTINTAS COLAS
+    int timeout = 20000;                                                         // TIMEOUT QUE USAREMOS PARA LAS COLAS
+    LinkedBlockingQueue<Message> tradeQ = new LinkedBlockingQueue<>();          // PARA OFERTAS INICIALES
+    LinkedBlockingQueue<Message> responseQ = new LinkedBlockingQueue<>();       // PARA RESPUESTAS
+    LinkedBlockingQueue<Message> negotiationQ = new LinkedBlockingQueue<>();    // PARA MENSAJES DE INTERCAMBIO
 
     //Atributos funcion del agente
     Random random = new Random();
     private int S = random.nextInt(41) + 60;
     private boolean G = false;
-    private Album album = new Album(30,S);
+    private Album album = new Album(60,S);
     private double initial_album_value = album.valorTotal;
 
     private double felicidad = 50;
@@ -111,8 +114,8 @@ public class Agent {
 
         // Avisar al Monitor de que el agente ha nacido;
         Message message = createMessage(null, "1","heNacido", 1, "TCP", monitor_key);
+        message.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
         sendToMonitor(message.toXML());
-
         // Por ahora lanzamos los hilos independientes asi para poder hacerlo
         new Thread(this::listenForMessages).start();
         new Thread(this::findAgents).start();
@@ -170,7 +173,7 @@ public class Agent {
         }
     }
 
-
+    // Método para inicializar el socket de escucha (descubrimiento)
     public void initializeDatagramSocket() {
     try {
         // Inicializa el DatagramSocket en el puerto específico
@@ -235,6 +238,8 @@ public class Agent {
                 e.printStackTrace();
             } catch (SAXException e) {
                 e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -260,11 +265,6 @@ public class Agent {
                 e.printStackTrace();
             }
         }
-    }
-
-    // Método para obtener el ID
-    public String getId() {
-        return id;
     }
 
     // Print información principal sobre el agente
@@ -293,32 +293,88 @@ public class Agent {
     // Puede decidir si realizar o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() throws InterruptedException {
-        Thread.sleep(10000);
+
+        Thread.sleep(2000);
         // Se ejecuta siempre
         while(true) {
             // Mientras que no esté pausado
             if(!pausado){
-                // Le envía una petición de mensaje de intercambio a cada uno de los agentes que hay en su lista
+                Thread.sleep(200);
                 for(AgentKey k : this.discoveredAgents.keySet()){
+                    // Si no está ocupado manda ofertas iniciales a los agentes
+                    if(!busy.get()){
 
-                    Thread.sleep(2000);
+                        // Creamos mensaje y le pasamos nuestra información de ofertaInicial
+                        // (deseados, ofrecidos, G, rupias)
+                        Message m = createMessage(null, "1", "ofertaInicial", 1, "TCP", k);
+                        m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
+                        m.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
+                        sendMessage(k.getIpString(), k.getPort(), m.toXML());
+                        sendToMonitor(m.toXML());
+                        // Esperamos respuesta a nuestra oferta
+                        System.out.println("ESPERAMOS RESPUESTA");
+                        Message response = this.responseQ.poll(this.timeout, TimeUnit.MILLISECONDS);
 
-                    // Creamos mensaje y le pasamos nuestra información de intercambio
-                    // (deseados, ofrecidos, G, rupias)
-                    Message m = createMessage(null, "1", "intercambio", 1, "TCP", k);
-                    m.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
-                    ;
-                    sendMessage(k.getIpString(), k.getPort(), m.toXML());
+                        // Si hay respuesta, la atendemos
+                        if (response != null) {
+                            // Si la respuesta es que le interesa, empezamos a negociar con ese agente
+                            if (response.getProtocol().equalsIgnoreCase("meInteresa")){
+                                busy.set(true);     // Marcamos que está ocupado
+                                this.tradeLock.lock();
+                                System.out.println("LE INTERESA");
+                                this.negotiationId = k;
+                                this.tradeLock.unlock();
+                                this.negociar(k, true);   // Negociamos
+                                this.negotiationQ.clear(); // Limpiamos la lista de cualquier mensaje que pueda quedar
+                                // Si no quedan ofertas iniciales que atender, deja de estar ocupado.
+                                if(this.tradeQ.isEmpty()){ this.busy.set(false); }
+                            }else{
+                                System.out.println("NO LE INTERESA");
+                            }
+                        }
 
-                    // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
-                    // Negociamos y actualizamos felicidad y g
-                    if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();}
+                    // Si está ocupado le toca mirar ofertas iniciales
+                    }else{
+                        while(!this.tradeQ.isEmpty()){
+                            Message offer = this.tradeQ.poll(this.timeout, TimeUnit.MILLISECONDS);
+                            // Si decidimos aceptarla
+                            if (this.decidirOfertaInicial(offer)){
+                                AgentKey leBron = new AgentKey(offer.getOriginIp(), offer.getOriginPortTCP());
 
+                                // ENVIAMOS MENSAJE ME INTERESA
+                                Message response = createMessage(null, "1", "meInteresa",
+                                        1, "TCP", leBron);
+                                response.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
+                                sendMessage(leBron.getIpString(), leBron.getPort(), response.toXML());
+                                sendToMonitor(response.toXML());
+
+                                // NOS PONEMOS A NEGOCIAR
+                                this.tradeLock.lock();
+                                this.negotiationId = leBron;
+                                this.tradeLock.unlock();
+                                this.negociar(leBron, false);
+                                this.negotiationQ.clear(); // Limpiamos la lista de cualquier mensaje que pueda quedar
+                                // YA NO ESTAMOS OCUPADOS
+                                busy.set(false);
+                            }else{
+                                AgentKey leBron = new AgentKey(offer.getOriginIp(), offer.getOriginPortTCP());
+                                // ENVIAMOS MENSAJE NO ME INTERESA
+                                Message response = createMessage(null, "sis", "noMeInteresa",
+                                        1, "TCP", k);
+                                response.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
+                                sendMessage(leBron.getIpString(), leBron.getPort(), response.toXML());
+                                sendToMonitor(response.toXML());
+                                // YA NO ESTAMOS OCUPADOS
+                                busy.set(false);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Función para mandar mensajes
     public void sendMessage() throws IOException {
         // Usamos un BufferedReader sin cerrarlo para evitar cerrar System.in
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -375,7 +431,6 @@ public class Agent {
         }
     }*/
 
-    
     //Descubre agentes por fuerza bruta
     public void findAgents() {
         //String discoveryMessage = "DISCOVERY_REQUEST";
@@ -513,20 +568,57 @@ public class Agent {
         }
     }
 
-    public void interpretarTipoMensaje(String tipo, String id, Message m) {
+    public void interpretarTipoMensaje(String tipo, String id, Message m) throws InterruptedException {
         if (!this.pausado || tipo.equals("continua")) {
             switch (tipo) {
-                case "parate" -> this.parar();
-                case "continua" -> this.continuar();
-                case "autodestruyete" -> this.autodestruccion();
-                case "reproducete" -> this.reproducirse();
-                case "intercambio" -> this.intercambiar(id, m); // Llama a intercambiar
-                case "decision" -> this.intercambiar(id, m);    // Llama a intercambiar
+                case "parate"                       -> this.parar();
+                case "continua"                     -> this.continuar();
+                case "autodestruyete"               -> this.autodestruccion();
+                case "reproducete"                  -> this.reproducirse();
+                case "ofertaInicial"                -> this.tratarOfertaInicial(m);
+                case "meInteresa", "noMeInteresa"   -> this.tratarRespuesta(m);
+                case "intercambio"                  -> this.tratarIntercambio(m);
+                case "decision"                     -> this.tratarDecision(m);
                 default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
             }
         }else{
             System.out.println("\nEl agente esta parado, actualmente la unica accion que recibe es continuar\n" );
         }
+    }
+
+    public void tratarOfertaInicial(Message m) throws InterruptedException {
+        Thread.sleep(100);
+        AgentKey k = new AgentKey(m.getOriginIp(), m.getOriginPortTCP());
+        System.out.println("LLEGA OFERTA DE "+m.getOriginId()+" EN "+k);
+        // Si no está ocupado, que se ocupe el thread de negociación
+        if (!busy.get()){
+            // Lo marcamos como ocupado y le pasamos la oferta
+            busy.set(true);
+            this.tradeQ.add(m);
+
+            // Si está ocupado, rechazamos la oferta
+        } else {
+            System.out.println("OCUPADO, RECHAZAMOS OFERTA");
+            Message reject = createMessage(m.getComId(), "RECHAZAO ", "noMeInteresa",
+                    1, "TCP", k);
+        }
+    }
+
+    public void tratarRespuesta(Message m){;
+        this.responseQ.add(m);
+    }
+
+    public void tratarIntercambio(Message m) throws InterruptedException {
+        // Sólo lo encolamos si estamos negociando con él
+        Thread.sleep(100);
+        this.negotiationQ.add(m);
+
+    }
+
+    public void tratarDecision(Message m) throws InterruptedException {
+        // Sólo lo encolamos si estamos negociando con él
+        Thread.sleep(100);
+        this.negotiationQ.add(m);
     }
 
     public void reproducirse() {
@@ -676,7 +768,7 @@ public class Agent {
             return true;
 
         } catch (Exception e) {
-            //System.out.println("XML no es válido: " + e.getMessage());
+            System.out.println("XML no es válido: " + e.getMessage());
             return false;
         }
     }
@@ -750,199 +842,262 @@ public class Agent {
 
     /////////////////////////////////
 
-    // Función para negociar con un agente
-    public void negociar() throws InterruptedException {
+    // Función para decidir si aceptar una oferta
+    public boolean decidirOfertaInicial(Message otherMsg){
 
-        /*
-         * EXPLICACIÓN DE LA LÓGICA
-         * AL PRINCIPIO LOS AGENTES SE GUARDAN TODAS LAS CARTAS QUE OFRECE Y QUIERE EL OTRO (PASAN LA LISTA ENTERA)
-         * LA PRIMERA ITERACIÓN SE MIRA:
-         *   1. INTERSECCIÓN CROMOS QUE QUIERES CON CROMOS QUE OFRECE EL OTRO
-         *   2. INTERSECCIÓN CROMOS QUE OFRECES CON CROMOS QUE QUIERE EL OTRO
-         * SI ALGUNA DE ESAS DOS COSAS NO TIENE ELEMENTOS NO HAY INTERESES COMUNES Y SE CANCELA EL INTERCAMBIO
-         * LUEGO LA IDEA ES QUE CADA UNO DE LOS AGENTES PASE UNA CARTA QUE OFRECE Y OTRA QUE QUIERE, Y ASÍ SE VAN EVALUANDO
-         * CADA UNO VA CEDIENDO MÁS CADA ITERACIÓN (OFRECIENDO UNA MEJOR SI NUMERO PAR, PIDIENDO UNA PEOR SI ITERACIÓN ES IMPAR)
-         */
+        ArrayList<Cromo> otherWants = new ArrayList<>();
+        ArrayList<Cromo> otherOffers = new ArrayList<>();
 
-
-        int negotiationCounter = 0;     // Contador de negociaciones
-        boolean skibidi = true;         // Booleano para saber cuando acabar la negociación;
-
-        // Lista de deseados del otro agente
-        ArrayList<Cromo> negWanted = new ArrayList<>();
-        // Lista de ofrecidos del otro agente
-        ArrayList<Cromo> negOffered = new ArrayList<>();
-
-        // Lista de orden ascendente, ya que nos interesa dar más las cartas con menos valor
-        LinkedList<Cromo> give = new LinkedList<>();
-        // Lista de orden descendente, nos interesa más llevarnos las cartas más valiosas
-        LinkedList<Cromo> take = new LinkedList<>();
-
-        Message m = this.queue.poll(20, TimeUnit.SECONDS);
-
-        // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
-        if(m == null){
-            tradeLock.lock();
-            this.busy.set(false);
-            this.negId = "";
-            tradeLock.unlock();
-            return;
-        }
-
-        // Info de comunicación
-        System.out.println("EL OTRO PRINGAO ES ESTE PAVO");
-        System.out.println(m.getOriginIp());
-        System.out.println(m.getOriginPortTCP());
-        AgentKey k = new AgentKey(m.getOriginIp(), m.getOriginPortTCP());
-        System.out.println(this.discoveredAgents.containsKey(k));
-        int msgId = Integer.parseInt(m.getMsgId())+1;
-        int prStep = m.getProtocolStep()+1;
-
-        // Plantilla de los mensajes que iremos mandando
-        Message myMessage = createMessage(m.getComId(), Integer.toString(msgId), "intercambio",
-                prStep, "TCP", k);
+        ArrayList<Cromo> myTake = new ArrayList<>();
+        ArrayList<Cromo> myGive = new ArrayList<>();
 
         // Memorizamos listas de deseados y ofrecidos del otro agente
-        for(int i : m.getWanted()){ negWanted.add(this.album.COLECCION.get(i-1)); }
-        for(int i : m.getOffered()){ negOffered.add(this.album.COLECCION.get(i-1)); }
+        for(int i : otherMsg.getWanted()){ otherWants.add(this.album.COLECCION.get(i-1)); }
+        for(int i : otherMsg.getOffered()){ otherOffers.add(this.album.COLECCION.get(i-1)); }
 
         // Miramos intersecciones entre nuestros cromos deseados y los suyos ofrecidos
         // Esto tiene un tímido O(n^2), pero no me da la vida pa cambiarlo a un hashmap con id pa reducirlo a O(n)
 
         // Se supone que listas están ordenadas según el valor calculado, por lo que el resultado lo estará también
         // Mayor a menor
-        for(Cromo mW : this.album.lista_deseados){ if(negOffered.contains(mW)) { take.add(mW); } }
+        for(Cromo mW : this.album.lista_deseados){ if(otherOffers.contains(mW)) { myTake.add(mW); } }
         // Menor a mayor
-        for(Cromo mO : this.album.lista_ofrezco){ if(negWanted.contains(mO)) { give.add(mO); } }
-
-        System.out.println("MI MENSAJE");
-        System.out.println(myMessage.toString());
-        System.out.println("OTRO MENSAJE");
-        System.out.println(m.toString());
+        for(Cromo mO : this.album.lista_ofrezco){ if(otherWants.contains(mO)) { myGive.add(mO); } }
 
         // Si alguna de las intersecciones está vacía, se rechaza el intercambio
-        if(give.size() == 0 || take.size() == 0){
-            this.terminarIntercambio(false, k, msgId, m.getComId());
-            return;
+        if(myGive.size() == 0 || myTake.size() == 0){
+            System.out.println("RECHAZAMOS");
+            return false;
+        }else{
+            System.out.println("ACEPTAMOS");
+            return true;
         }
 
+    }
+
+    // Función para negociar con un agente
+    public void negociar(AgentKey k, boolean empiezo) throws InterruptedException {
+
+        /*
+        * 1. LOS AGENTES SE MANDAN EL UNO AL OTRO SUS ÁLBUMES ENTEROS
+        * 2. CREAN INTERSECCIONES:
+        *       INTERSECCIÓN CROMOS QUE QUIERES CON CROMOS QUE OFRECE EL OTRO
+        *       INTERSECCIÓN CROMOS QUE OFRECES CON CROMOS QUE QUIERE EL OTRO
+        * 3.
+         */
+
+        /*
+         * SI ALGUNA DE ESAS DOS COSAS NO TIENE ELEMENTOS NO HAY INTERESES COMUNES Y SE CANCELA EL INTERCAMBIO
+         * LUEGO LA IDEA ES QUE CADA UNO DE LOS AGENTES PASE UNA CARTA QUE OFRECE Y OTRA QUE QUIERE, Y ASÍ SE VAN EVALUANDO
+         * CADA UNO VA CEDIENDO MÁS CADA ITERACIÓN (OFRECIENDO UNA MEJOR SI NUMERO PAR, PIDIENDO UNA PEOR SI ITERACIÓN ES IMPAR)
+         */
+
+        System.out.println("\n");
+        System.out.println("-------------------------------------------------------");
+        System.out.println("EMPEZANDO NEGOCIACIÓN CON AGENTE "+this.negotiationId);
+        System.out.println("-------------------------------------------------------");
+        System.out.println("\n");
+
+        // ESTAS VARIABLES SE USARÁN PARA SABER QUÉ TE TOCA HACER ESTA NEGOCIACIÓN
+        int n = 0;  // Contador, se usará para hacer resto = n%2
+        int c;      // Me tocará cuando resto == c
+        if(empiezo){ c = 0; }else{ c = 1; }
+
+        Message myMsg;
+        Message otherMsg;
+
+        int msgId;
+        int protocolStep;
+        String comId;
+
+        boolean skibidi = true;         // Booleano para saber cuando acabar la negociación;
+
+        // SI EMPIEZO PRIMERO COMPARTO MI MENSAJE Y LUEGO ESPERO AL DEL OTRO MENSAJE
+        if(empiezo){
+            msgId = 1;
+            protocolStep = 1;
+
+            // Crear y mandar mensaje
+            myMsg = createMessage(null, Integer.toString(msgId), "intercambio", protocolStep,
+                    "TCP", k);
+            myMsg.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, this.G, 0);
+            myMsg.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
+            sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
+            sendToMonitor(myMsg.toXML());
+            comId = myMsg.getComId();
+            otherMsg = this.negotiationQ.poll(this.timeout, TimeUnit.MILLISECONDS);
+            if (otherMsg == null){
+                tradeLock.lock();
+                this.negotiationId = null;
+                tradeLock.unlock();
+                System.out.println("ME SALGO 1");
+                return;
+            }
+            msgId = Integer.parseInt(otherMsg.getMsgId())+1;
+            protocolStep = otherMsg.getProtocolStep()+1;
+
+        // SI NO EMPIEZO PRIMERO LEO EL MENSAJE DEL OTRO AGENTE Y LUEGO CONSTRUYO Y ENVÍO EL MÍO
+        }else{
+            otherMsg = this.negotiationQ.poll(this.timeout, TimeUnit.MILLISECONDS);
+            if (otherMsg == null){
+                tradeLock.lock();
+                this.negotiationId = null;
+                tradeLock.unlock();
+                System.out.println("ME SALGO 2");
+                return;
+            }
+            msgId = Integer.parseInt(otherMsg.getMsgId())+1;
+            protocolStep = otherMsg.getProtocolStep()+1;
+            comId = otherMsg.getComId();
+
+            // Crear y mandar mensaje
+            myMsg = createMessage(comId, Integer.toString(msgId), "intercambio", protocolStep,
+                    "TCP", k);
+            myMsg.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, this.G, 0);
+            myMsg.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
+            sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
+            sendToMonitor(myMsg.toXML());
+        }
+
+        // Lista de deseados del otro agente
+        ArrayList<Cromo> otherWants = new ArrayList<>();
+        // Lista de ofrecidos del otro agente
+        ArrayList<Cromo> otherOffers = new ArrayList<>();
+
+        // Lista de orden ascendente que contendrá los cromos que podemos dar
+        LinkedList<Cromo> myGive = new LinkedList<>();
+        // Lista de orden descendente que contendrá los cromos que podemos tomar
+        LinkedList<Cromo> myTake = new LinkedList<>();
+
+        // Memorizamos listas de deseados y ofrecidos del otro agente
+        for(int i : otherMsg.getWanted()){ otherWants.add(this.album.COLECCION.get(i-1)); }
+        for(int i : otherMsg.getOffered()){ otherOffers.add(this.album.COLECCION.get(i-1)); }
+
+        // Miramos intersecciones entre nuestros cromos deseados y los suyos ofrecidos
+        // Esto tiene un tímido O(n^2), pero no me da la vida pa cambiarlo a un hashmap con id pa reducirlo a O(n)
+
+        // Se supone que listas están ordenadas según el valor calculado, por lo que el resultado lo estará también
+        // Mayor a menor
+        for(Cromo mW : this.album.lista_deseados){ if(otherOffers.contains(mW)) { myTake.add(mW); } }
+        // Menor a mayor
+        for(Cromo mO : this.album.lista_ofrezco){ if(otherWants.contains(mO)) { myGive.add(mO); } }
+
+        System.out.println("-------------------------------------------------------");
+        System.out.println("INTERESES COMUNES:");
+        System.out.println("YO TOMO: "+myTake);
+        System.out.println("YO DOY: "+myGive);
+        System.out.println("-------------------------------------------------------");
+        System.out.println();
+
         // CROMOS CON LOS QUE NEGOCIAMOS AHORA MISMO
-        Cromo doy = give.poll();
-        Cromo tomo = take.poll();
-
-        Cromo current_doy = doy;
-        Cromo current_tomo = tomo;
-
-        // if(this.album.evaluarIntercambio(give.get(0), take.get(0))) {}
+        Cromo give = myGive.poll();
+        Cromo take = myTake.poll();
+        Cromo ofertaDar = null;
+        Cromo ofertaTomar = null;
 
         // COMIENZA EL BUCLE LESS GO
         while(skibidi){
 
-            // Primero, miramos la mejor oferta que estamos haciendo para ver si nos vale la pena, si no cancelamos
-            if(!this.album.evaluarIntercambio(doy, tomo)){
-                this.terminarIntercambio(false, k, msgId, m.getComId());
-                return;
-            }
+            // TURNO DE ENVIAR MENSAJE
+            if(n%2 == c){
 
-            // Obtenemos mensaje SOLO SI NO ES PRIMERA ITERACIÓN (ya viene pre-cargado)
-            if(negotiationCounter != 0){
-                System.out.println("MI MENSAJE");
-                System.out.println(myMessage.toString());
-                System.out.println("OTRO MENSAJE");
-                System.out.println(m.toString());
+                // PRIMERO MIRAREMOS LA OFERTA PREVIA Y DECIDIREMOS SI ACEPTARLA
+                if (ofertaDar != null && ofertaTomar != null){ // Miramos que existan (en el primer envío no existen)
+                    // Evaluamos la oferta recibida, si nos gusta el intercambio la aceptamos.
+                    if(this.album.evaluarIntercambio(ofertaDar, ofertaTomar)){
+                        // Actualizar cosas del album
+                        this.album.consigo(ofertaTomar);
+                        this.album.quito(ofertaDar);
+                        this.trade_counter++;
+                        this.terminarIntercambio(true, k, msgId, comId);
+                        return;
+                    }
+                }
 
-                m = this.queue.poll(20, TimeUnit.SECONDS);
+                // VA ALTERNANDO ENTRE PEDIR CROMOS LIGERAMENTE PEORES Y OFRECER CROMOS LIGERAMENTE MEJORES
+                if(n%4 < 2){ give = myGive.poll(); }else{ take = myTake.poll(); }
 
-                // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
-                if(m == null){
-                    tradeLock.lock();
-                    this.busy.set(false);
-                    this.negId = "";
-                    tradeLock.unlock();
+                // CANCELAMOS INTERCAMBIO EN DOS CONDICIONES
+                // 1. NO QUEDAN OFERTAS QUE HACER
+                // 2. NO VALE LA PENA HACER MÁS OFERTAS (LAS EVALUAMOS COMO FALSE)
+                // SI SE CUMPLE ALGUNA DE ELLAS CANCELAMOS
+                if (give == null || take == null){
+                    this.terminarIntercambio(false, k, 1, comId);
                     return;
                 }
 
-                // Actualizamos msgId y prStep
-                msgId = Integer.parseInt(m.getMsgId())+1;
-                prStep = m.getProtocolStep()+1;
-            }
-
-            // Miramos si es decisión
-            if(m.getProtocol().equals("decision")){
-                // Si acepta
-                if(m.getDecision()){
-                    // Actualizar cosas del album
-                    this.album.consigo(tomo);
-                    this.album.quito(doy);
-                    this.trade_counter++;
-                }
-                tradeLock.lock();
-                this.busy.set(false);
-                this.negId = "";
-                tradeLock.unlock();
-                return;
-            }
-
-            // Ahora miramos el paso del protocolo, si es el 2 el otro agente aún no conoce nuestras listas
-            // ponemos G=false para meterle un tímido nerf, que si no puedes ir robando todas las cartas de una
-            if(prStep == 2){
-                myMessage.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, false, 0);
-                this.sendMessage(k.getIpString(), k.getPort(), myMessage.toXML());
-                negotiationCounter++;
-                continue; // Pasamos a siguiente iteración del bucle
-            }
-
-            // EN EL RESTO DE ITERACIONES, MIRAMOS LA OFERTA QUE NOS LLEGA
-            Cromo ofertaDar = this.album.COLECCION.get(m.getWanted().get(0)-1);
-            Cromo ofertaTomar = this.album.COLECCION.get(m.getOffered().get(0)-1);
-
-            // Evaluamos la oferta recibida, si nos gusta el intercambio la aceptamos.
-            if(this.album.evaluarIntercambio(ofertaDar, ofertaTomar)){
-                // Actualizar cosas del album
-                this.album.consigo(current_tomo);
-                this.album.quito(current_doy);
-                this.trade_counter++;
-                this.terminarIntercambio(true, k, msgId, m.getComId());
-                return;
-            }
-
-            // Actualizamos nuestra oferta vigente
-            if(doy != null){ current_doy = doy; }
-            if(tomo != null){ current_tomo = tomo; }
-
-            ArrayList<Cromo> dame = new ArrayList<>();
-            dame.add(tomo);
-
-            ArrayList<Cromo> toma = new ArrayList<>();
-            dame.add(doy);
-
-            // Enviamos nuestra nueva oferta
-            myMessage.addTrade(dame, toma, this.G, 0);
-
-
-            if(negotiationCounter % 2 == 0){
-                doy = give.poll();
-                if(doy == null){
-                    // Si no podemos mejorar oferta con el ofrecido, lo hacemos con el pedido
-                    tomo = take.poll();
+                if(!this.album.evaluarIntercambio(give, take)){
+                    this.terminarIntercambio(false, k, 1, comId);
+                    return;
                 }
 
+                // MODIFICAMOS Y ENVIAMOS OFERTA
+                ArrayList<Cromo> w = new ArrayList<>(); w.add(take);
+                ArrayList<Cromo> o = new ArrayList<>(); o.add(give);
+                myMsg.addTrade(w, o, this.G, 0);
+                myMsg.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
+                this.sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
+                this.sendToMonitor(myMsg.toXML());
+                System.out.println("-------------------------------------------------------");
+                System.out.println("HE ENVIADO:");
+                System.out.println(myMsg);
+                System.out.println();
+
+            // TURNO DE MIRAR MENSAJE
             }else{
-                tomo = take.poll();
-                if(tomo == null){
-                    // Si no podemos mejorar oferta con el pedido, lo hacemos con el ofrecido
-                    doy = give.poll();
+                // Miramos mensaje
+                otherMsg = this.negotiationQ.poll(this.timeout, TimeUnit.MILLISECONDS);
+
+                // Si no obtenemos mensaje asumimos que ha muerto (D.E.P.)
+                if (otherMsg == null){
+                    tradeLock.lock();
+                    this.negotiationId = null;
+                    tradeLock.unlock();
+                    System.out.println("ME SALGO 3");
+                    return;
                 }
-            }
+                System.out.println("-------------------------------------------------------");
+                System.out.println("HE RECIBIDO");
+                System.out.println(otherMsg);
+                System.out.println();
 
-            // Si nos quedamos sin poder mejorar ofertas, cancelamos intercambio
-            if(doy == null && tomo == null){
-                this.terminarIntercambio(false, k, msgId, m.getComId());
-                return;
-            }
+                // Actualizamos msgId y protocolStep
+                msgId = Integer.parseInt(otherMsg.getMsgId())+1;
+                protocolStep = otherMsg.getProtocolStep()+1;
 
-            negotiationCounter++;
-            Thread.sleep(2000);
+                // Miramos si es decisión,  hacemos lo que debamos
+                if(otherMsg.getProtocol().equals("decision")){
+                    // Si acepta
+                    if(otherMsg.getDecision()){
+                        // Actualizar cosas del album
+                        this.album.consigo(take);
+                        this.album.quito(give);
+                        this.trade_counter++;
+                        System.out.println("******************************************************");
+                        System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
+                        System.out.println("******************************************************");
+                        actualizarFelicdad();
+                    }else{
+                        System.out.println("******************************************************");
+                        System.out.println("*****************INTERCAMBIO DENEGADO*****************");
+                        System.out.println("******************************************************");
+                        actualizarFelicdad();
+                    }
+
+                    tradeLock.lock();
+                    this.busy.set(false);
+                    this.negotiationId = null;
+                    tradeLock.unlock();
+                    System.out.println("");
+                    return;
+                }
+
+                // SI LA EJECUCIÓN LLEGA AQUÍ, ES TIPO "intercambio" Y MIRAMOS LA OFERTA QUE NOS LLEGA
+                ofertaDar = this.album.COLECCION.get(otherMsg.getWanted().get(0)-1);
+                ofertaTomar = this.album.COLECCION.get(otherMsg.getOffered().get(0)-1);
+
+            }
+            n++;
 
         }
 
@@ -958,30 +1113,6 @@ public class Agent {
 
     }
 
-    // Función para tratar los mensajes de intercambio que nos lleguen.
-    public void intercambiar(String id, Message m) {
-        tradeLock.lock();
-        try{
-
-            // Miramos si está ocupado, si no lo está empezamos un intercambio nuevo y lo marcamos como ocupado
-            if (!busy.get()){
-                busy.set(true);
-                negId = id;
-            }else{
-                // Si estamos ocupados y nos llega un mensaje del agente con el que estamos negociando, lo atendemos
-                if (id.equals(negId)){
-                    queue.put(m);   // Encolamos el mensaje de negociación
-                }else{
-                    // Si no es con el que estamos negociando, lo ignoramos
-                }
-            }
-
-        }catch(Exception e){
-            e.printStackTrace();
-        }
-        finally{ tradeLock.unlock(); }
-    }
-
     public void terminarIntercambio(boolean d, AgentKey k, int mId, String cId) {
         if(d){
             System.out.println("******************************************************");
@@ -994,19 +1125,23 @@ public class Agent {
         }
         Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
         m.addDecision(d);
+        m.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
         this.sendMessage(k.getIpString(), k.getPort(), m.toXML());
+        this.sendToMonitor(m.toXML());
         tradeLock.lock();
         this.busy.set(false);
-        this.negId = "";
+        this.negotiationId = null;
+        actualizarFelicdad();
         tradeLock.unlock();
     }
 
     public void actualizarFelicdad() {
+
         // Función elegida para suavizar el número de intercambios: raíz cuadrada
         double valor = regularizacion_incremento_album * (this.album.valorTotal - initial_album_value) + regularizacion_numero_intercambios * Math.sqrt(this.trade_counter);
         // Función logística para mantener felicidad entre 0 y 100, con 50 como punto base.
         this.felicidad  = 100 / (1 + Math.exp(-valor));
-
+        System.out.println("Actualizando felicidad " + this.felicidad);
     }
 
     public void check_g() {
@@ -1053,7 +1188,6 @@ public class Agent {
                 // Leer el comando
                 command = reader.readLine();
                 if (command == null) break;
-
                 // Procesar el comando
                 if (command.equalsIgnoreCase("status")) {
                     agent.reporteEstado();

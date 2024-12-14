@@ -33,6 +33,7 @@ public class Album {
     public boolean[][] sets; // Matriz de tamaño 10x10. La primera driección se refiere al número de set y la segunda a la carta en el set. True si la tienes, False si no.
     public int[] valorSet; // Array con el valor del set i+1 (los sets empiezan en 1, el array en 0).
 
+
     private int S;
 
     // Constructor que inicializa las variables que contienen y determinan el dominio propio del agente.
@@ -134,6 +135,26 @@ public class Album {
             }
         }
     }
+    //Devuelve el número de sets completados
+    public int getSetsCompletados(){
+        int setsCompletados = 0;
+        int cartas_en_sets = 0;
+
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                if (this.sets[i][j]){
+                    cartas_en_sets++;
+                }
+            }
+            if (cartas_en_sets == 10){
+                setsCompletados++;
+            }
+            cartas_en_sets = 0;
+
+        }
+        return setsCompletados;
+
+    }
 
     // Método que actualiza el valorTotal de álbum. Debe llamarse cada vez que se modifique el álbum.
     private void actualizarValor(){
@@ -162,6 +183,7 @@ public class Album {
     // TODO: ARREGLAR ESTE MÉTODO
     // Método que actualiza la lista_deseados del álbum. Debe llamarse cada vez que se modifique el álbum.
     private void ordenarDeseados(){
+        this.lista_deseados = new ArrayList<>();
         List<Cromo> no_tengo = new ArrayList<>();
         List<OrdenCromo> lista_ordenada = new ArrayList<>();
 
@@ -204,8 +226,8 @@ public class Album {
             }
         });
 
-        //
-        for (int i = 0; i < 10; i++) {
+
+        for (int i = 0; i < 30; i++) {
             //System.out.println(lista_ordenada.get(i));
             this.lista_deseados.add(lista_ordenada.get(i).cromo);
         }
@@ -214,6 +236,7 @@ public class Album {
     // TODO: ARREGLAR ESTE MÉTODO
     // Método que actualiza la lista_ofrezco del álbum. Debe llamarse cada vez que se modifique el álbum.
     private void ordenarOfrecidos(){
+        this.lista_ofrezco = new ArrayList<>();
         List<OrdenCromo> lista_ordenada = new ArrayList<>();
         // Para cada cromo que tengo...
         for (int i = 0; i < this.tengo.size(); i++) {
@@ -247,7 +270,7 @@ public class Album {
             }
         });
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 30; i++) {
             //System.out.println(lista_ordenada.get(i));
             this.lista_ofrezco.add(lista_ordenada.get(i).cromo);
         }

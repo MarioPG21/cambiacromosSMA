@@ -100,7 +100,7 @@ public class Message {
 
         // EN ESTE BLOQUE RECOGEMOS INFORMACIÓN ESPECÍFICA DE INTERCAMBIO O DECISIÓN
         switch (this.protocol) {
-            case "intercambio" -> {
+            case "ofertaInicial", "intercambio" -> {
                 // Miramos si hay trading block
                 NodeList t = doc.getElementsByTagName("trading_block");
                 if (t.getLength() > 0) {
@@ -149,9 +149,8 @@ public class Message {
 
             // Pillamos numero de sets completados
             this.completedSets = Integer.parseInt(doc.getElementsByTagName("completed_sets").item(0).getTextContent());
-
             // Pillamos numero de cromos
-            this.numCards = Integer.parseInt(doc.getElementsByTagName("completed_sets").item(0).getTextContent());
+            this.numCards = Integer.parseInt(doc.getElementsByTagName("num_cards").item(0).getTextContent());
 
         }
 
@@ -271,7 +270,7 @@ public class Message {
             destination.appendChild(destinationT);
 
             switch (this.protocol) {
-                case "intercambio" -> {
+                case "intercambio", "ofertaInicial" -> {
                     // Si el protocolo es intercambio añade bloque Intercambio
                     Element tradingBlock = doc.createElement("trading_block");
                     rootElement.appendChild(tradingBlock);
@@ -351,16 +350,22 @@ public class Message {
         }
     }
 
+
     public String toString(){
         StringBuilder str = new StringBuilder(
                 "COMUNICACIÓN: " + comId + ", mensaje: " + msgId +
                 "\nPROTOCOLO: " +  protocol + ", paso " + protocolStep + ", protocolo de com: " + comProtocol +
                 "\nORIGEN" +
                 "id: " + originId + ", ip: " + originIp + ", puertos: ("+originPortTCP+", "+originPortUDP+")"+
-                "\nDESTINO" +
+                " DESTINO" +
                 "id: " + destId + ", ip: " + destIp + ", puertos (TCP, UDP): ("+destPortTCP+", "+destPortUDP+")");
 
-        // Miramos si tiene información de intercambio y lo unimos
+        if (!wanted.isEmpty()){
+            str.append("\nCROMOS OFRECIDOS: " + offered.toString());
+            str.append("\nCROMOS PEDIDOS: " + wanted.toString());
+        }
+
+        /* Miramos si tiene información de intercambio y lo unimos
         if (!wanted.isEmpty()){
             str.append("\nCROMOS OFRECIDOS\n");
             str.append(offered.toString());
@@ -376,7 +381,7 @@ public class Message {
 
             if(steal)
             str.append("\n").append(originId).append(" LE ROBA A ").append(destId).append("!!!");
-        }
+        }*/
 
         return str.toString();
     }
