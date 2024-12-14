@@ -86,6 +86,9 @@
               <xs:enumeration value="meMuero"/>
               <xs:enumeration value="hola"/>
               <xs:enumeration value="estoy"/>
+              <xs:enumeration value="ofertaInicial"/>
+              <xs:enumeration value="meInteresa"/>
+              <xs:enumeration value="noMeInteresa"/>
               <xs:enumeration value="intercambio"/>
               <xs:enumeration value="decision"/>
               <!-- Protocolos asociados al comportamiento especifico. Cambia cromos, etc..basico -->
