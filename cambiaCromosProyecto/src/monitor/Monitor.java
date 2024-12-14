@@ -33,7 +33,7 @@ public class Monitor {
     public static void main(String[] args) {
         //Creamos el archivo xsd
         try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv"))) {
-            writer.println("OriginID,DestinationID,TypeProtocol,ComunicationProtocol,ProtocolStep,origin_time"); // Encabezados del CSV
+            writer.println("OriginID,DestinationID,TypeProtocol,ProtocolStep,origin_time"); // Encabezados del CSV
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -230,7 +230,7 @@ public class Monitor {
             String time = message.getOriginTime();
             //Los añadimos al  xsd
             try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv", true))) {
-                writer.println(origin_id + "," + Dest_id + "," + type + "," + protocol + "," + protocol_step + "," + time);
+                writer.println(origin_id + "," + Dest_id + "," + type + ","  + protocol_step + "," + time);
             }
         } catch (Exception e) {
         e.printStackTrace();
@@ -299,12 +299,24 @@ public class Monitor {
                             generarXsd(xmlContent);
                             break;
                         case "intercambio":
-                            System.out.println("El agente " + originId + "intenta intercambiar en " + clientSocket.getInetAddress().getHostAddress());
+                            System.out.println("El agente " + originId + " intenta intercambiar en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
                             break;
                         case "decision":
-                            System.out.println("El agente " + originId + "toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "ofertaInicial":
+                            System.out.println("El agente " + originId + " hace la oferta principal en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "meInteresa":
+                            System.out.println("El agente " + originId + " le interesa" + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "nomeInteresa":
+                            System.out.println("El agente " + originId + " no le interesa en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
                         default:

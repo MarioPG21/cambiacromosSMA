@@ -344,7 +344,9 @@ public class Agent {
                                 // ENVIAMOS MENSAJE ME INTERESA
                                 Message response = createMessage(null, "1", "meInteresa",
                                         1, "TCP", leBron);
+                                response.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
                                 sendMessage(leBron.getIpString(), leBron.getPort(), response.toXML());
+                                sendToMonitor(response.toXML());
 
                                 // NOS PONEMOS A NEGOCIAR
                                 this.tradeLock.lock();
@@ -355,9 +357,13 @@ public class Agent {
                                 // YA NO ESTAMOS OCUPADOS
                                 busy.set(false);
                             }else{
+                                AgentKey leBron = new AgentKey(offer.getOriginIp(), offer.getOriginPortTCP());
                                 // ENVIAMOS MENSAJE NO ME INTERESA
                                 Message response = createMessage(null, "sis", "noMeInteresa",
                                         1, "TCP", k);
+                                response.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
+                                sendMessage(leBron.getIpString(), leBron.getPort(), response.toXML());
+                                sendToMonitor(response.toXML());
                                 // YA NO ESTAMOS OCUPADOS
                                 busy.set(false);
                             }
@@ -915,8 +921,9 @@ public class Agent {
             myMsg = createMessage(null, Integer.toString(msgId), "intercambio", protocolStep,
                     "TCP", k);
             myMsg.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, this.G, 0);
+            myMsg.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
             sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
-
+            sendToMonitor(myMsg.toXML());
             comId = myMsg.getComId();
             otherMsg = this.negotiationQ.poll(this.timeout, TimeUnit.MILLISECONDS);
             if (otherMsg == null){
@@ -947,7 +954,9 @@ public class Agent {
             myMsg = createMessage(comId, Integer.toString(msgId), "intercambio", protocolStep,
                     "TCP", k);
             myMsg.addTrade(this.album.lista_deseados, this.album.lista_ofrezco, this.G, 0);
+            myMsg.addInfoMonitor((int)felicidad,album.getSetsCompletados(),album.tengo.size());
             sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
+            sendToMonitor(myMsg.toXML());
         }
 
         // Lista de deseados del otro agente
@@ -1012,7 +1021,12 @@ public class Agent {
                 // 1. NO QUEDAN OFERTAS QUE HACER
                 // 2. NO VALE LA PENA HACER MÁS OFERTAS (LAS EVALUAMOS COMO FALSE)
                 // SI SE CUMPLE ALGUNA DE ELLAS CANCELAMOS
-                if(!this.album.evaluarIntercambio(give, take) || give == null || take == null){
+                if (give == null || take == null){
+                    this.terminarIntercambio(false, k, 1, comId);
+                    return;
+                }
+
+                if(!this.album.evaluarIntercambio(give, take)){
                     this.terminarIntercambio(false, k, 1, comId);
                     return;
                 }
@@ -1021,7 +1035,9 @@ public class Agent {
                 ArrayList<Cromo> w = new ArrayList<>(); w.add(take);
                 ArrayList<Cromo> o = new ArrayList<>(); o.add(give);
                 myMsg.addTrade(w, o, this.G, 0);
+                myMsg.addInfoMonitor((int) felicidad,album.getSetsCompletados(),album.tengo.size());
                 this.sendMessage(k.getIpString(), k.getPort(), myMsg.toXML());
+                this.sendToMonitor(myMsg.toXML());
                 System.out.println("-------------------------------------------------------");
                 System.out.println("HE ENVIADO:");
                 System.out.println(myMsg);
@@ -1060,11 +1076,14 @@ public class Agent {
                         System.out.println("******************************************************");
                         System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
                         System.out.println("******************************************************");
+                        actualizarFelicdad();
                     }else{
                         System.out.println("******************************************************");
                         System.out.println("*****************INTERCAMBIO DENEGADO*****************");
                         System.out.println("******************************************************");
+                        actualizarFelicdad();
                     }
+
                     tradeLock.lock();
                     this.busy.set(false);
                     this.negotiationId = null;
@@ -1112,6 +1131,7 @@ public class Agent {
         tradeLock.lock();
         this.busy.set(false);
         this.negotiationId = null;
+        actualizarFelicdad();
         tradeLock.unlock();
     }
 

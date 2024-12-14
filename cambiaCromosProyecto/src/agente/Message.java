@@ -350,6 +350,7 @@ public class Message {
         }
     }
 
+
     public String toString(){
         StringBuilder str = new StringBuilder(
                 "COMUNICACIÓN: " + comId + ", mensaje: " + msgId +
