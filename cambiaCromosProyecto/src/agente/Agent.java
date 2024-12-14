@@ -313,7 +313,6 @@ public class Agent {
                     sendToMonitor(m.toXML());
                     // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
                     // Negociamos y actualizamos felicidad y g
-
                     if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();
                         System.out.println("Negociando");}
 

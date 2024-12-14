@@ -30,6 +30,8 @@ public class Monitor {
     private static String[] columnas = {"Agente", "Número de cartas", "Sets Completados", "Felicidad", "Ladrón"};
     private static Object[][] datos = {{"Total", 0, 0, 0},};
     private static DefaultTableModel modelo = new DefaultTableModel(datos, columnas);
+
+
     public static void main(String[] args) {
         //Creamos el archivo xsd
         try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv"))) {
@@ -299,12 +301,24 @@ public class Monitor {
                             generarXsd(xmlContent);
                             break;
                         case "intercambio":
-                            System.out.println("El agente " + originId + "intenta intercambiar en " + clientSocket.getInetAddress().getHostAddress());
+                            System.out.println("El agente " + originId + " intenta intercambiar en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
                             break;
                         case "decision":
-                            System.out.println("El agente " + originId + "toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "ofertaInicial":
+                            System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "meInteresa":
+                            System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
+                            ActualizarInfo(xmlContent);
+                            generarXsd(xmlContent);
+                        case "nomeInteresa":
+                            System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
                         default:
