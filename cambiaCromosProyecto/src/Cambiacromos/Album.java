@@ -227,7 +227,7 @@ public class Album {
         });
 
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 30; i++) {
             //System.out.println(lista_ordenada.get(i));
             this.lista_deseados.add(lista_ordenada.get(i).cromo);
         }
@@ -270,7 +270,7 @@ public class Album {
             }
         });
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 30; i++) {
             //System.out.println(lista_ordenada.get(i));
             this.lista_ofrezco.add(lista_ordenada.get(i).cromo);
         }

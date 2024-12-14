@@ -77,7 +77,7 @@ public class Agent {
     Random random = new Random();
     private int S = random.nextInt(41) + 60;
     private boolean G = false;
-    private Album album = new Album(70,S);
+    private Album album = new Album(60,S);
     private double initial_album_value = album.valorTotal;
 
     private double felicidad = 50;
@@ -293,6 +293,7 @@ public class Agent {
     // Puede decidir si realizar o no un intercambio llamando a this.album.evaluarIntercambio que recibe dos instancias del tipo cromo y devuelve si el agente hace o no el intercambio
     // Consideramos que el cromo A es el que tenemos y vamos a dar y el Cromo B el que vamos a recibir.
     public void funcionDelAgente() throws InterruptedException {
+
         Thread.sleep(2000);
         // Se ejecuta siempre
         while(true) {
@@ -300,7 +301,7 @@ public class Agent {
             if(!pausado){
                 // Le envía una petición de mensaje de intercambio a cada uno de los agentes que hay en su lista
                 for(AgentKey k : this.discoveredAgents.keySet()){
-
+                    System.out.println("Amimir: Enviando mensaje a "+k);
                     Thread.sleep(2000);
 
                     // Creamos mensaje y le pasamos nuestra información de intercambio
@@ -312,7 +313,9 @@ public class Agent {
                     sendToMonitor(m.toXML());
                     // Si nos llega la notificación de que alguien ha devuelto un mensaje de negociación
                     // Negociamos y actualizamos felicidad y g
-                    if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();}
+
+                    if(busy.get()){ this.negociar(); this.actualizarFelicdad(); this.check_g();
+                        System.out.println("Negociando");}
 
                 }
             }
@@ -520,8 +523,14 @@ public class Agent {
                 case "continua" -> this.continuar();
                 case "autodestruyete" -> this.autodestruccion();
                 case "reproducete" -> this.reproducirse();
-                case "intercambio" -> this.intercambiar(id, m); // Llama a intercambiar
-                case "decision" -> this.intercambiar(id, m);    // Llama a intercambiar
+                case "intercambio" -> {
+                    System.out.println("Mensaje intercambio");
+                    this.intercambiar(id, m); // Llama a intercambiar
+                }
+                case "decision" -> {
+                    System.out.println("Mensaje Decision");
+                    this.intercambiar(id, m);    // Llama a intercambiar
+                }
                 default -> System.out.println("Tipo de mensaje no implementado: " + tipo);
             }
         }else{
@@ -676,7 +685,7 @@ public class Agent {
             return true;
 
         } catch (Exception e) {
-            //System.out.println("XML no es válido: " + e.getMessage());
+            System.out.println("XML no es válido: " + e.getMessage());
             return false;
         }
     }
@@ -846,8 +855,7 @@ public class Agent {
 
             // Obtenemos mensaje SOLO SI NO ES PRIMERA ITERACIÓN (ya viene pre-cargado)
             if(negotiationCounter != 0){
-                System.out.println("MI MENSAJE");
-                System.out.println(myMessage.toString());
+
                 System.out.println("OTRO MENSAJE");
                 System.out.println(m.toString());
 
@@ -916,11 +924,11 @@ public class Agent {
             dame.add(tomo);
 
             ArrayList<Cromo> toma = new ArrayList<>();
-            dame.add(doy);
+            toma.add(doy);
 
             // Enviamos nuestra nueva oferta
             myMessage.addTrade(dame, toma, this.G, 0);
-
+            sendMessage(k.getIpString(),k.getPort(),myMessage.toXML());
 
             if(negotiationCounter % 2 == 0){
                 doy = give.poll();
@@ -974,6 +982,10 @@ public class Agent {
                 if (id.equals(negId)){
                     queue.put(m);   // Encolamos el mensaje de negociación
                 }else{
+                    /*AgentKey k = new AgentKey(m.getOriginIp(),m.getOriginPortTCP());
+                    Message m_1 = createMessage(null,"1","decision",1,"TCP",k);
+                    m_1.addDecision(false);
+                    sendMessage(k.getIpString(),k.getPort(),m_1.toXML());*/
                     // Si no es con el que estamos negociando, lo ignoramos
                 }
             }

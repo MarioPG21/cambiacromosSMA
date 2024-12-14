@@ -182,6 +182,9 @@ public class Message {
         ArrayList<Integer> offered = new ArrayList<>();
         for(Cromo c: w){ wanted.add(c.getId()); }
         for(Cromo c: o){ offered.add(c.getId()); }
+        System.out.println("\n\n\n Wanted "+wanted);
+        System.out.println("\n\n\n Offered "+offered);
+        System.out.println("\n\n\n");
         this.wanted = wanted; this.offered = offered; this.steal = g; this.rupees = r;
     }
 
