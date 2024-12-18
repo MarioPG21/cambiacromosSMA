@@ -23,6 +23,7 @@ import org.xml.sax.SAXException;
 
 public class Monitor {
 
+
     private static int num_agents = 0;
     private static int felicidad_prueba = 10;
     private static ConcurrentHashMap<AgentKey_Monitor, AgentInfo_Monitor> agents = new ConcurrentHashMap<>();
@@ -30,6 +31,8 @@ public class Monitor {
     private static String[] columnas = {"Agente", "Número de cartas", "Sets Completados", "Felicidad", "Ladrón"};
     private static Object[][] datos = {{"Total", 0, 0, 0},};
     private static DefaultTableModel modelo = new DefaultTableModel(datos, columnas);
+
+
     public static void main(String[] args) {
         //Creamos el archivo xsd
         try (PrintWriter writer = new PrintWriter(new FileWriter("mensajes.csv"))) {
@@ -110,18 +113,7 @@ public class Monitor {
         // Agregar la tabla a un JScrollPane para el desplazamiento
         JScrollPane scrollPane = new JScrollPane(tabla);
 
-        JButton actualizarBtn = new JButton("Prueba actualizar Tabla");
-        actualizarBtn.addActionListener(e -> {
-            // Nuevos datos para actualizar la tabla
-
-            agents.put(new AgentKey_Monitor(Integer.toString(num_agents)),new AgentInfo_Monitor(Integer.toString(num_agents),felicidad_prueba,2,8,true));
-            num_agents += 1;
-            felicidad_prueba += 10;
-            actualizarTabla(); // Llamar al método de actualización
-        });
-
         frame.add(scrollPane, BorderLayout.CENTER);
-        frame.add(actualizarBtn, BorderLayout.SOUTH);
         // Mostrar el marco
         frame.setVisible(true);
     }
@@ -307,18 +299,22 @@ public class Monitor {
                             System.out.println("El agente " + originId + " toma una decisión en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
+                            break;
                         case "ofertaInicial":
                             System.out.println("El agente " + originId + " hace la oferta principal en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
+                            break;
                         case "meInteresa":
                             System.out.println("El agente " + originId + " le interesa" + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
+                            break;
                         case "nomeInteresa":
                             System.out.println("El agente " + originId + " no le interesa en " + clientSocket.getInetAddress().getHostAddress());
                             ActualizarInfo(xmlContent);
                             generarXsd(xmlContent);
+                            break;
                         default:
                             System.out.println("Tipo de mensaje desconocido de " + originId + ": " + type);
                             break;

@@ -82,15 +82,14 @@ public class Agent {
     private boolean G = false;
     private Album album = new Album(60,S);
     private double initial_album_value = album.valorTotal;
-
-    private double felicidad = 50;
+    private double felicidad = 0;
 
     //Subir cada vez que se realice un intercambio
     // TODO: concretar funcionamiento de esto, ahora mismo está sólo con los intercambios exitosos
     private int trade_counter = 0;
 
-    private double regularizacion_incremento_album = 0.05;
-    private double regularizacion_numero_intercambios = 0.05;
+    private double regularizacion_incremento_album = 0.2;
+    private double regularizacion_numero_intercambios = 0.2;
 
     // Constructor
     public Agent(String id) throws UnknownHostException {
@@ -1077,11 +1076,22 @@ public class Agent {
                         System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
                         System.out.println("******************************************************");
                         actualizarFelicdad();
+                        Random random = new Random();
+                        int randomNumber = random.nextInt(100) + 1;
+                        if (felicidad >= 75 && randomNumber >= 50){
+                            reproducirse();
+                        }
                     }else{
                         System.out.println("******************************************************");
                         System.out.println("*****************INTERCAMBIO DENEGADO*****************");
                         System.out.println("******************************************************");
+                        this.trade_counter--;
                         actualizarFelicdad();
+                        Random random = new Random();
+                        int randomNumber = random.nextInt(100) + 1;
+                        if (felicidad <= 25 && randomNumber >= 50){
+                            autodestruccion();
+                        }
                     }
 
                     tradeLock.lock();
@@ -1118,10 +1128,20 @@ public class Agent {
             System.out.println("******************************************************");
             System.out.println("*****************INTERCAMBIO ACEPTADO*****************");
             System.out.println("******************************************************");
+            Random random = new Random();
+            int randomNumber = random.nextInt(100) + 1;
+            if (felicidad >= 75 && randomNumber >= 50){
+                reproducirse();
+            }
         }else{
             System.out.println("******************************************************");
             System.out.println("*****************INTERCAMBIO DENEGADO*****************");
             System.out.println("******************************************************");
+            Random random = new Random();
+            int randomNumber = random.nextInt(100) + 1;
+            if (felicidad <= 25 && randomNumber >= 50){
+                autodestruccion();
+            }
         }
         Message m = createMessage(cId, Integer.toString(mId), "decision", 1, "TCP", k);
         m.addDecision(d);
