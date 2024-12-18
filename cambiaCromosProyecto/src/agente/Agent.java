@@ -55,9 +55,9 @@ public class Agent {
     private ServerSocket serverSocket;
     private DatagramSocket datagramSocket;
     private ConcurrentHashMap<AgentKey, AgentInfo> discoveredAgents = new ConcurrentHashMap<>();
-    private ArrayList<String> ipList = new ArrayList<>(List.of("127.0.0.1"));
+    private ArrayList<String> ipList = new ArrayList<>(List.of("192.168.23.227","192.168.23.161"));
     //Monitor info
-    private final String monitorIP = "127.0.0.1";
+    private final String monitorIP = "192.168.23.161";
     private final int monitorPort = 4300;
     private AgentKey monitor_key;
 
@@ -124,15 +124,15 @@ public class Agent {
 
     // Método para obtener la IP local
     private String getLocalIpAddress() {
-        // NOTA: VA COMO UN TIRO PERO PARA LAS PRUEBAS VAMOS A HACERLO CON LA IP LOCAL POR DEFECTO
-        /*try {
+
+        try {
             InetAddress localHost = InetAddress.getLocalHost();
             return localHost.getHostAddress();
          } catch (UnknownHostException e) {
             e.printStackTrace();
             return "127.0.0.1"; // IP por defecto en caso de error
-        }*/
-        return "127.0.0.1";
+        }
+        //return "127.0.0.1";
     }
 
     // Método para encontrar puertos disponibles y asignarlos
